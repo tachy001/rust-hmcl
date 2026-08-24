@@ -20,7 +20,11 @@ pub fn two_line_list_item(
     let height = 56.0;
     let (rect, response) = ui.allocate_exact_size(
         Vec2::new(ui.available_width(), height),
-        if clickable { Sense::click() } else { Sense::hover() },
+        if clickable {
+            Sense::click()
+        } else {
+            Sense::hover()
+        },
     );
 
     let bg = if selected {
@@ -35,20 +39,26 @@ pub fn two_line_list_item(
 
     let mut x = rect.min.x + 14.0;
     if let Some(icon_name) = icon_name {
-        let icon_rect = Rect::from_min_size(
-            Pos2::new(x, rect.center().y - 12.0),
-            Vec2::splat(24.0),
-        );
+        let icon_rect =
+            Rect::from_min_size(Pos2::new(x, rect.center().y - 12.0), Vec2::splat(24.0));
         crate::widgets::icon::icon_in_rect(
             ui.painter(),
             icon_rect,
             icon_name,
-            if selected { palette.on_primary_container } else { palette.on_surface_variant },
+            if selected {
+                palette.on_primary_container
+            } else {
+                palette.on_surface_variant
+            },
         );
         x += 38.0;
     }
 
-    let title_color = if selected { palette.on_primary_container } else { palette.on_surface };
+    let title_color = if selected {
+        palette.on_primary_container
+    } else {
+        palette.on_surface
+    };
     let subtitle_color = if selected {
         palette.on_primary_container
     } else {
@@ -88,18 +98,11 @@ pub fn two_line_list_item(
 }
 
 /// A single-line list item with optional leading icon (port of `AdvancedListItem`).
-pub fn list_item(
-    ui: &mut Ui,
-    id: egui::Id,
-    icon_name: Option<&str>,
-    title: &str,
-) -> Response {
+pub fn list_item(ui: &mut Ui, id: egui::Id, icon_name: Option<&str>, title: &str) -> Response {
     let palette = theme::palette();
     let height = 44.0;
-    let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width(), height),
-        Sense::click(),
-    );
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::click());
     let bg = if response.hovered() {
         palette.surface_container_high
     } else {
@@ -110,11 +113,14 @@ pub fn list_item(
 
     let mut x = rect.min.x + 14.0;
     if let Some(icon_name) = icon_name {
-        let icon_rect = Rect::from_min_size(
-            Pos2::new(x, rect.center().y - 11.0),
-            Vec2::splat(22.0),
+        let icon_rect =
+            Rect::from_min_size(Pos2::new(x, rect.center().y - 11.0), Vec2::splat(22.0));
+        crate::widgets::icon::icon_in_rect(
+            ui.painter(),
+            icon_rect,
+            icon_name,
+            palette.on_surface_variant,
         );
-        crate::widgets::icon::icon_in_rect(ui.painter(), icon_rect, icon_name, palette.on_surface_variant);
         x += 36.0;
     }
     ui.painter().text(

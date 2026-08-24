@@ -69,7 +69,11 @@ impl Dialog {
     ///
     /// Returns `None` while the dialog is still open, and the result once
     /// it is closed.
-    pub fn show<T>(self, ctx: &Context, content: impl FnOnce(&mut Ui) -> T) -> Option<DialogResult> {
+    pub fn show<T>(
+        self,
+        ctx: &Context,
+        content: impl FnOnce(&mut Ui) -> T,
+    ) -> Option<DialogResult> {
         let palette = theme::palette();
         let mut result: Option<DialogResult> = None;
 
@@ -92,26 +96,31 @@ impl Dialog {
                                     .size(16.0)
                                     .color(palette.on_surface),
                             );
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let (rect, response) =
-                                    ui.allocate_exact_size(Vec2::splat(30.0), egui::Sense::click());
-                                if response.hovered() {
-                                    ui.painter().circle_filled(
-                                        rect.center(),
-                                        14.0,
-                                        palette.surface_container_highest,
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    let (rect, response) = ui.allocate_exact_size(
+                                        Vec2::splat(30.0),
+                                        egui::Sense::click(),
                                     );
-                                }
-                                icon::icon_in_rect(
-                                    ui.painter(),
-                                    rect,
-                                    "CLOSE",
-                                    palette.on_surface_variant,
-                                );
-                                if response.clicked() {
-                                    result = Some(DialogResult::Dismissed);
-                                }
-                            });
+                                    if response.hovered() {
+                                        ui.painter().circle_filled(
+                                            rect.center(),
+                                            14.0,
+                                            palette.surface_container_highest,
+                                        );
+                                    }
+                                    icon::icon_in_rect(
+                                        ui.painter(),
+                                        rect,
+                                        "CLOSE",
+                                        palette.on_surface_variant,
+                                    );
+                                    if response.clicked() {
+                                        result = Some(DialogResult::Dismissed);
+                                    }
+                                },
+                            );
                         });
                         ui.separator();
                         // Content
@@ -127,12 +136,14 @@ impl Dialog {
                         ui.add_space(8.0);
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if let Some(text) = &self.negative_text
-                                && crate::widgets::text_button(ui, self.id.with("neg"), text, false).clicked()
+                                && crate::widgets::text_button(ui, self.id.with("neg"), text, false)
+                                    .clicked()
                             {
                                 result = Some(DialogResult::Cancel);
                             }
                             if let Some(text) = &self.positive_text
-                                && crate::widgets::text_button(ui, self.id.with("pos"), text, true).clicked()
+                                && crate::widgets::text_button(ui, self.id.with("pos"), text, true)
+                                    .clicked()
                                 && self.positive_enabled
                             {
                                 result = Some(DialogResult::Accept);
@@ -157,8 +168,11 @@ impl Dialog {
 /// Draw the rounded dialog background with a border.
 fn dialog_frame(ui: &mut Ui, palette: theme::MonetPalette) {
     let rect = ui.max_rect();
-    ui.painter()
-        .rect_filled(rect, egui::CornerRadius::same(12), palette.surface_container_high);
+    ui.painter().rect_filled(
+        rect,
+        egui::CornerRadius::same(12),
+        palette.surface_container_high,
+    );
     ui.painter().rect_stroke(
         rect,
         egui::CornerRadius::same(12),
@@ -177,7 +191,11 @@ pub fn message(ctx: &Context, title: impl Into<String>, text: impl Into<String>)
 }
 
 /// Show a confirmation dialog with accept/cancel buttons.
-pub fn confirm(ctx: &Context, title: impl Into<String>, text: impl Into<String>) -> Option<DialogResult> {
+pub fn confirm(
+    ctx: &Context,
+    title: impl Into<String>,
+    text: impl Into<String>,
+) -> Option<DialogResult> {
     Dialog::new(Id::new("__confirm__"), title).show(ctx, |ui| {
         ui.label(text.into());
     })

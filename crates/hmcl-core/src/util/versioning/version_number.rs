@@ -443,13 +443,34 @@ mod tests {
     #[test]
     fn test_is_int_version() {
         for version in [
-            "", " ", ".", "1.", ".1", ".1.", "1..8", "1.8.", ".1.8", "1.7.10forge1614_FTBInfinity",
-            "3.2-5", "1.9999999999",
+            "",
+            " ",
+            ".",
+            "1.",
+            ".1",
+            ".1.",
+            "1..8",
+            "1.8.",
+            ".1.8",
+            "1.7.10forge1614_FTBInfinity",
+            "3.2-5",
+            "1.9999999999",
         ] {
-            assert!(!VersionNumber::is_int_version_number(version), "{version:?}");
+            assert!(
+                !VersionNumber::is_int_version_number(version),
+                "{version:?}"
+            );
         }
         for version in [
-            "0", "1", "0.1", "0.1.0", "1.8", "1.12.2", "1.13.1", "1.999999999", "999999999.0",
+            "0",
+            "1",
+            "0.1",
+            "0.1.0",
+            "1.8",
+            "1.12.2",
+            "1.13.1",
+            "1.999999999",
+            "999999999.0",
         ] {
             assert!(VersionNumber::is_int_version_number(version), "{version:?}");
         }
@@ -530,7 +551,8 @@ mod tests {
         ];
         let mut output: Vec<String> = input.iter().map(|s| s.to_string()).collect();
         let expected: Vec<String> = input.iter().map(|s| s.to_string()).collect();
-        let comparator = |a: &String, b: &String| VersionNumber::compare(a, b).then_with(|| a.cmp(b));
+        let comparator =
+            |a: &String, b: &String| VersionNumber::compare(a, b).then_with(|| a.cmp(b));
 
         // Sorting the reversed list must reproduce the sorted order.
         let mut reversed = output.clone();

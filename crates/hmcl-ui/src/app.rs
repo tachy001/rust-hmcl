@@ -131,9 +131,10 @@ fn setup_fonts(ctx: &Context) {
     let font_path = crate::assets_dir().join("fonts/NotoSansSC.ttf");
     match std::fs::read(&font_path) {
         Ok(bytes) => {
-            fonts
-                .font_data
-                .insert("noto_sans_sc".to_owned(), egui::FontData::from_owned(bytes).into());
+            fonts.font_data.insert(
+                "noto_sans_sc".to_owned(),
+                egui::FontData::from_owned(bytes).into(),
+            );
             for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
                 fonts
                     .families
@@ -144,7 +145,10 @@ fn setup_fonts(ctx: &Context) {
             tracing::info!("loaded bundled CJK font from {}", font_path.display());
         }
         Err(e) => {
-            tracing::warn!("failed to load bundled CJK font {}: {e}", font_path.display());
+            tracing::warn!(
+                "failed to load bundled CJK font {}: {e}",
+                font_path.display()
+            );
         }
     }
     ctx.set_fonts(fonts);
@@ -206,11 +210,7 @@ fn paint_background(ctx: &Context, app: &HmclApp) {
         }
         // Dark scrim so light text stays readable over bright wallpapers.
         if app.appearance.is_dark() {
-            painter.rect_filled(
-                screen,
-                0.0,
-                Color32::from_black_alpha(64),
-            );
+            painter.rect_filled(screen, 0.0, Color32::from_black_alpha(64));
         }
     }
 }
@@ -231,7 +231,8 @@ fn title_bar(ctx: &Context, _app: &HmclApp) {
                     ui.max_rect().min,
                     Pos2::new(ui.max_rect().max.x - buttons_width, ui.max_rect().max.y),
                 );
-                let response = ui.interact(drag_rect, ui.id().with("title_drag"), egui::Sense::drag());
+                let response =
+                    ui.interact(drag_rect, ui.id().with("title_drag"), egui::Sense::drag());
                 if response.drag_started() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
                 }
@@ -265,7 +266,12 @@ fn title_bar(ctx: &Context, _app: &HmclApp) {
         });
 }
 
-fn window_button(ui: &mut Ui, icon_name: &str, palette: theme::MonetPalette, action: impl FnOnce(&Context)) {
+fn window_button(
+    ui: &mut Ui,
+    icon_name: &str,
+    palette: theme::MonetPalette,
+    action: impl FnOnce(&Context),
+) {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(40.0), egui::Sense::click());
     let color = if response.hovered() {
         palette.primary_container
@@ -317,7 +323,8 @@ fn nav_category(ui: &mut Ui, key: &str) {
 fn nav_item(ui: &mut Ui, app: &mut HmclApp, page: NavPage) {
     let palette = theme::palette();
     let selected = app.nav == page;
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 36.0), egui::Sense::click());
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), 36.0), egui::Sense::click());
 
     let item_rect = rect.shrink2(Vec2::new(10.0, 2.0));
     if selected {
@@ -334,12 +341,21 @@ fn nav_item(ui: &mut Ui, app: &mut HmclApp, page: NavPage) {
         );
     }
 
-    let icon_color = if selected { palette.on_primary_container } else { palette.on_surface_variant };
-    let text_color = if selected { palette.on_primary_container } else { palette.on_surface };
+    let icon_color = if selected {
+        palette.on_primary_container
+    } else {
+        palette.on_surface_variant
+    };
+    let text_color = if selected {
+        palette.on_primary_container
+    } else {
+        palette.on_surface
+    };
 
     let icon_rect = Rect::from_min_size(rect.min + Vec2::new(22.0, 8.0), Vec2::splat(20.0));
     ui.painter().extend(
-        crate::widgets::icon_shapes(page.icon_name(), icon_rect.min, 20.0, icon_color).unwrap_or_default(),
+        crate::widgets::icon_shapes(page.icon_name(), icon_rect.min, 20.0, icon_color)
+            .unwrap_or_default(),
     );
     let text_pos = Pos2::new(rect.min.x + 52.0, rect.center().y);
     ui.painter().text(
@@ -372,4 +388,3 @@ impl HmclApp {
         }
     }
 }
-

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::download::file::{download_file, DownloadProgress};
+use crate::download::file::{DownloadProgress, download_file};
 use crate::download::version_list::RemoteVersion;
 use crate::game::{AssetIndex, GameVersion};
 
@@ -78,10 +78,7 @@ impl InstallTask {
 }
 
 /// Start installing `version` into `game_dir` on the background runtime.
-pub fn spawn_install(
-    version: RemoteVersion,
-    game_dir: PathBuf,
-) -> InstallTask {
+pub fn spawn_install(version: RemoteVersion, game_dir: PathBuf) -> InstallTask {
     let status = Arc::new(Mutex::new(None));
     let finished = Arc::new(Mutex::new(None));
     let task = InstallTask {
@@ -93,9 +90,8 @@ pub fn spawn_install(
             .enable_all()
             .build()
             .expect("failed to start install runtime");
-        let result = runtime.block_on(async move {
-            install_version(&version, &game_dir, &status).await
-        });
+        let result =
+            runtime.block_on(async move { install_version(&version, &game_dir, &status).await });
         *finished.lock().unwrap() = Some(result.map_err(|e| format!("{e:#}")));
     });
     task
@@ -208,7 +204,10 @@ pub async fn install_version(
         }
         download_file(
             &client,
-            &format!("https://resources.download.minecraft.net/{}", object.object_path()),
+            &format!(
+                "https://resources.download.minecraft.net/{}",
+                object.object_path()
+            ),
             &dest,
             None,
             Some(object.size),
@@ -220,4 +219,3 @@ pub async fn install_version(
     report(&progress, "安装完成".to_owned());
     Ok(())
 }
-

@@ -136,7 +136,8 @@ pub fn apply_style(style: &mut egui::Style, appearance: Appearance, accent: Acce
     style.spacing.button_padding = egui::vec2(12.0, 6.0);
     style.spacing.interact_size.y = 30.0;
     let mut scroll = egui::style::ScrollStyle::solid();
-    scroll.bar_width = 6.0;scroll.floating = false;
+    scroll.bar_width = 6.0;
+    scroll.floating = false;
     style.spacing.scroll = scroll;
 }
 
@@ -160,6 +161,3 @@ mod tests {
         assert_eq!(palette.surface.to_hex(), "#121318ff");
     }
 }
-
-
-

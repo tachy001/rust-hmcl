@@ -24,6 +24,7 @@ dirs = "6"
 sys-locale = "0.3"
 dark-light = "2"
 webbrowser = "1"
+lyon = "1"
 eframe = "0.32"
 egui = "0.32"
 egui_extras = { version = "0.32", features = ["image"] }

@@ -54,7 +54,10 @@ impl Validator for UrlValidator {
 
 /// Whether `value` looks like an absolute http(s) URL.
 pub fn url_like(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("http://").or_else(|| value.strip_prefix("https://")) else {
+    let Some(rest) = value
+        .strip_prefix("http://")
+        .or_else(|| value.strip_prefix("https://"))
+    else {
         return false;
     };
     !rest.is_empty() && !rest.chars().any(char::is_whitespace)

@@ -10,19 +10,21 @@ use crate::theme;
 pub fn tab_bar(ui: &mut Ui, id: Id, labels: &[String], selected: &mut usize) -> bool {
     let palette = theme::palette();
     let height = 40.0;
-    let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width(), height),
-        Sense::hover(),
-    );
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::hover());
 
     let mut changed = false;
     let mut x = rect.min.x;
     let mut selected_rect = None;
     for (index, label) in labels.iter().enumerate() {
         let text_width = ui.fonts(|f| {
-            f.layout_no_wrap(label.clone(), egui::FontId::proportional(14.0), palette.on_surface)
-                .size()
-                .x
+            f.layout_no_wrap(
+                label.clone(),
+                egui::FontId::proportional(14.0),
+                palette.on_surface,
+            )
+            .size()
+            .x
         });
         let tab_rect = Rect::from_min_max(
             Pos2::new(x, rect.min.y),
@@ -30,8 +32,11 @@ pub fn tab_bar(ui: &mut Ui, id: Id, labels: &[String], selected: &mut usize) -> 
         );
         let tab_response = ui.interact(tab_rect, id.with(index), Sense::click());
         if tab_response.hovered() && index != *selected {
-            ui.painter()
-                .rect_filled(tab_rect, egui::CornerRadius::same(6), palette.surface_container_high);
+            ui.painter().rect_filled(
+                tab_rect,
+                egui::CornerRadius::same(6),
+                palette.surface_container_high,
+            );
         }
         let fg = if index == *selected {
             palette.primary

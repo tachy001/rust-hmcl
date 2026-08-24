@@ -8,8 +8,8 @@ use anyhow::Context;
 /// Compute the SHA-1 checksum of a file, returning a hex string.
 pub fn sha1_hex(path: &Path) -> anyhow::Result<String> {
     use sha1::{Digest, Sha1};
-    let bytes = std::fs::read(path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let bytes =
+        std::fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
     let mut hasher = Sha1::new();
     hasher.update(&bytes);
     Ok(format!("{:x}", hasher.finalize()))

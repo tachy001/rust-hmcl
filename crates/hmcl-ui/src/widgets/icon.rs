@@ -60,9 +60,10 @@ impl Parser {
         self.skip_separators();
         let start = self.pos;
         if let Some(c) = self.chars.get(self.pos)
-            && (*c == '+' || *c == '-') {
-                self.pos += 1;
-            }
+            && (*c == '+' || *c == '-')
+        {
+            self.pos += 1;
+        }
         let mut seen_digit = false;
         let mut seen_dot = false;
         while let Some(c) = self.chars.get(self.pos) {
@@ -76,9 +77,10 @@ impl Parser {
                 let save = self.pos;
                 self.pos += 1;
                 if let Some(sign) = self.chars.get(self.pos)
-                    && (*sign == '+' || *sign == '-') {
-                        self.pos += 1;
-                    }
+                    && (*sign == '+' || *sign == '-')
+                {
+                    self.pos += 1;
+                }
                 if self.chars.get(self.pos).is_some_and(|c| c.is_ascii_digit()) {
                     seen_dot = true; // block a second exponent
                     while self.chars.get(self.pos).is_some_and(|c| c.is_ascii_digit()) {
@@ -259,9 +261,13 @@ impl Parser {
                 }
                 'A' | 'a' => {
                     let relative = command == 'a';
-                    while let (Some(rx), Some(ry), Some(rotation), Some(large_arc), Some(sweep)) =
-                        (self.number(), self.number(), self.number(), self.flag(), self.flag())
-                    {
+                    while let (Some(rx), Some(ry), Some(rotation), Some(large_arc), Some(sweep)) = (
+                        self.number(),
+                        self.number(),
+                        self.number(),
+                        self.flag(),
+                        self.flag(),
+                    ) {
                         let (x, y) = match (self.number(), self.number()) {
                             (Some(x), Some(y)) => (x, y),
                             _ => break,
@@ -302,7 +308,8 @@ fn flatten_quadratic(from: Pos2, control: Pos2, to: Pos2, out: &mut Vec<Pos2>) {
     for i in 1..=CURVE_STEPS {
         let t = i as f32 / CURVE_STEPS as f32;
         let mt = 1.0 - t;
-        let point = mt * mt * from.to_vec2() + 2.0 * mt * t * control.to_vec2() + t * t * to.to_vec2();
+        let point =
+            mt * mt * from.to_vec2() + 2.0 * mt * t * control.to_vec2() + t * t * to.to_vec2();
         out.push(point.to_pos2());
     }
 }
@@ -412,49 +419,131 @@ fn parsed_icons() -> &'static IconCache {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Cache of tessellated meshes keyed by (name, size bits, color).
+type MeshCache = Mutex<HashMap<(String, u32, u32), std::sync::Arc<egui::Mesh>>>;
+
+fn mesh_cache() -> &'static MeshCache {
+    static CACHE: OnceLock<MeshCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Tessellate the parsed subpaths into a filled mesh using lyon's
+/// NonZero fill rule (epaint's `PathShape` fill only supports convex
+/// polygons, which is insufficient for Material icons).
+fn tessellate(subpaths: &[Vec<Pos2>]) -> Option<egui::Mesh> {
+    use lyon::tessellation::{
+        BuffersBuilder, FillOptions, FillTessellator, FillVertex, VertexBuffers,
+    };
+
+    let mut builder = lyon::path::Path::builder();
+    for subpath in subpaths {
+        if subpath.len() < 3 {
+            continue;
+        }
+        let mut points = subpath.iter();
+        let first = *points.next()?;
+        builder.begin(lyon::math::point(first.x, first.y));
+        let mut last = first;
+        for point in points {
+            if *point == last {
+                continue; // skip the closing duplicate point
+            }
+            builder.line_to(lyon::math::point(point.x, point.y));
+            last = *point;
+        }
+        builder.close();
+    }
+    let path = builder.build();
+
+    let mut geometry: VertexBuffers<egui::epaint::Vertex, u32> = VertexBuffers::new();
+    let mut tessellator = FillTessellator::new();
+    let options = FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::NonZero);
+    tessellator
+        .tessellate_path(
+            &path,
+            &options,
+            &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| {
+                let position = vertex.position();
+                egui::epaint::Vertex {
+                    pos: Pos2::new(position.x, position.y),
+                    uv: Pos2::ZERO,
+                    color: Color32::WHITE,
+                }
+            }),
+        )
+        .ok()?;
+    if geometry.vertices.is_empty() {
+        return None;
+    }
+    Some(egui::Mesh {
+        indices: geometry.indices,
+        vertices: geometry.vertices,
+        texture_id: Default::default(),
+    })
+}
+
 /// Build egui `Shape`s for the named icon, scaled to fit `size` at `origin`.
+///
+/// Filled with lyon tessellation so concave paths and holes render
+/// correctly.
 pub fn icon_shapes(name: &str, origin: Pos2, size: f32, color: Color32) -> Option<Vec<Shape>> {
     let path = icons_data::find(name)?;
     if path.is_empty() {
         return None;
     }
 
-    let mut cache = parsed_icons().lock().unwrap();
-    let subpaths = if let Some(subpaths) = cache.get(name) {
-        subpaths.clone()
-    } else {
-        let subpaths = parse_path(path);
-        cache.insert(
-            icons_data::ICONS
-                .iter()
-                .find(|(n, _)| *n == name)
-                .map(|(n, _)| *n)
-                .unwrap(),
-            subpaths.clone(),
-        );
-        subpaths
-    };
-    drop(cache);
-
     let scale = size / 24.0;
-    let shapes = subpaths
-        .into_iter()
-        .filter(|subpath| subpath.len() >= 2)
-        .map(|subpath| {
-            let points: Vec<Pos2> = subpath
-                .into_iter()
-                .map(|p| Pos2::new(origin.x + p.x * scale, origin.y + p.y * scale))
-                .collect();
-            let closed = points.first() == points.last();
-            Shape::Path(egui::epaint::PathShape {
-                points,
-                closed,
-                fill: color,
-                stroke: egui::epaint::PathStroke::NONE,
-            })
-        })
-        .collect();
-    Some(shapes)
+    let cache_key = (
+        name.to_owned(),
+        size.to_bits(),
+        u32::from_be_bytes(color.to_array()),
+    );
+
+    // Fast path: cached mesh, just translate/scale a copy.
+    let mesh = {
+        let cache = mesh_cache().lock().unwrap();
+        cache.get(&cache_key).cloned()
+    };
+    let mesh = match mesh {
+        Some(mesh) => mesh,
+        None => {
+            let subpaths = {
+                let mut cache = parsed_icons().lock().unwrap();
+                if let Some(subpaths) = cache.get(name) {
+                    subpaths.clone()
+                } else {
+                    let subpaths = parse_path(path);
+                    let key = icons_data::ICONS
+                        .iter()
+                        .find(|(n, _)| *n == name)
+                        .map(|(n, _)| *n)
+                        .unwrap();
+                    cache.insert(key, subpaths.clone());
+                    subpaths
+                }
+            };
+            let mesh = tessellate(&subpaths)?;
+            // Scale the mesh to the requested size in 24x24 space.
+            let scaled: egui::Mesh = {
+                let mut mesh = mesh.clone();
+                for vertex in &mut mesh.vertices {
+                    vertex.pos = Pos2::new(vertex.pos.x * scale, vertex.pos.y * scale);
+                    vertex.color = color;
+                }
+                mesh
+            };
+            let mesh = std::sync::Arc::new(scaled);
+            mesh_cache().lock().unwrap().insert(cache_key, mesh.clone());
+            mesh
+        }
+    };
+
+    // Translate to the requested origin (mesh is cached in 24-space scale).
+    let mut translated = (*mesh).clone();
+    for vertex in &mut translated.vertices {
+        vertex.pos += origin.to_vec2();
+    }
+    Some(vec![Shape::Mesh(std::sync::Arc::new(translated))])
 }
 
 /// Paint an icon centered in an allocated rect of `size`.
@@ -490,7 +579,9 @@ mod tests {
 
     #[test]
     fn test_parse_relative_and_arc() {
-        let subpaths = parse_path("M11,7H13A2,2 0 0,1 15,9V17H13V13H11V17H9V9A2,2 0 0,1 11,7M11,9V11H13V9H11Z");
+        let subpaths = parse_path(
+            "M11,7H13A2,2 0 0,1 15,9V17H13V13H11V17H9V9A2,2 0 0,1 11,7M11,9V11H13V9H11Z",
+        );
         assert_eq!(subpaths.len(), 2);
     }
 
@@ -508,5 +599,3 @@ mod tests {
         }
     }
 }
-
-

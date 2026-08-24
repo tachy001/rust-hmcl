@@ -12,5 +12,7 @@ pub mod version;
 pub use arguments::{Argument, Arguments, StringArgument};
 pub use asset_index::{AssetIndex, AssetObject};
 pub use library::{Library, LibraryDownloadInfo, LibraryDownloads};
-pub use rules::{CompatibilityRule, OperatingSystem, OSRestriction};
-pub use version::{AssetIndexInfo, DownloadInfo, GameVersion, JavaVersion, LoggingInfo, VersionType};
+pub use rules::{CompatibilityRule, OSRestriction, OperatingSystem};
+pub use version::{
+    AssetIndexInfo, DownloadInfo, GameVersion, JavaVersion, LoggingInfo, VersionType,
+};

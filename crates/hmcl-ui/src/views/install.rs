@@ -6,12 +6,12 @@
 use egui::{Context, RichText, Ui};
 
 use hmcl_core::download::install::InstallTask;
-use hmcl_core::download::version_list::{RemoteVersion, VersionManifest, VersionType};
 use hmcl_core::download::spawn_install;
+use hmcl_core::download::version_list::{RemoteVersion, VersionManifest, VersionType};
 
-use crate::async_runtime::{spawn, AsyncTask};
+use crate::async_runtime::{AsyncTask, spawn};
 use crate::theme;
-use crate::widgets::toast::{hint, ToastKind, Toasts};
+use crate::widgets::toast::{ToastKind, Toasts, hint};
 
 /// Persistent state of the download page.
 #[derive(Default)]
@@ -36,84 +36,101 @@ impl DownloadPage {
 
         // Drain the fetch result.
         if let Some(task) = &self.task
-            && let Some(result) = task.poll() {
-                self.task = None;
-                match result {
-                    Ok(manifest) => self.manifest = Some(manifest),
-                    Err(e) => self.error = Some(e),
-                }
+            && let Some(result) = task.poll()
+        {
+            self.task = None;
+            match result {
+                Ok(manifest) => self.manifest = Some(manifest),
+                Err(e) => self.error = Some(e),
             }
+        }
 
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ctx, |ui| {
-                ui.add_space(20.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(24.0);
-                    crate::widgets::card(ui, |ui| {
-                        ui.set_width((ui.available_width() - 24.0).min(720.0));
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                RichText::new(crate::i18n::tr("download"))
-                                    .size(20.0)
-                                    .color(palette.on_surface),
-                            );
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.button(crate::i18n::tr("button.refresh")).clicked() {
-                                    self.refresh();
-                                }
-                            });
-                        });
-
-                        ui.add_space(8.0);
-                        ui.horizontal(|ui| {
-                            crate::widgets::rounded_text_edit_singleline(
-                                ui,
-                                &mut self.search,
-                                &crate::i18n::tr("search"),
-                                (ui.available_width() - 8.0).min(340.0),
-                            );
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let labels = vec![
-                                    crate::i18n::tr("instance.game.releases"),
-                                    crate::i18n::tr("instance.game.snapshots"),
-                                    crate::i18n::tr("instance.game.old"),
-                                ];
-                                let _ = crate::widgets::tab_bar(
-                                    ui,
-                                    ui.id().with("version_tabs"),
-                                    &labels,
-                                    &mut self.tab,
+                egui::Frame::new()
+                    .inner_margin(egui::Margin::same(20))
+                    .show(ui, |ui| {
+                        crate::widgets::card(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(crate::i18n::tr("download"))
+                                        .size(20.0)
+                                        .color(palette.on_surface),
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if crate::widgets::outlined_button(
+                                            ui,
+                                            ui.id().with("refresh"),
+                                            &crate::i18n::tr("button.refresh"),
+                                            Some("REFRESH"),
+                                        )
+                                        .clicked()
+                                        {
+                                            self.refresh();
+                                        }
+                                    },
                                 );
                             });
-                        });
 
-                        ui.add_space(8.0);
-                        let mut install_request: Option<RemoteVersion> = None;
-                        egui::ScrollArea::vertical()
-                            .max_height(ui.available_height())
-                            .show(ui, |ui| match (&self.manifest, &self.error) {
-                                (Some(manifest), _) => {
-                                    install_request = self.version_list(ui, manifest);
-                                }
-                                (None, Some(error)) => {
-                                    hint(ui, ToastKind::Error, &crate::i18n::tr("download.failed"));
-                                    ui.label(error);
-                                }
-                                _ => {
-                                    ui.horizontal(|ui| {
-                                        crate::widgets::spinner(ui, 20.0);
-                                        ui.label(crate::i18n::tr("download.content"));
-                                    });
-                                }
+                            ui.add_space(8.0);
+                            ui.horizontal(|ui| {
+                                crate::widgets::rounded_text_edit_singleline(
+                                    ui,
+                                    &mut self.search,
+                                    &crate::i18n::tr("search"),
+                                    (ui.available_width() - 8.0).min(340.0),
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        let labels = vec![
+                                            crate::i18n::tr("instance.game.releases"),
+                                            crate::i18n::tr("instance.game.snapshots"),
+                                            crate::i18n::tr("instance.game.old"),
+                                        ];
+                                        let _ = crate::widgets::tab_bar(
+                                            ui,
+                                            ui.id().with("version_tabs"),
+                                            &labels,
+                                            &mut self.tab,
+                                        );
+                                    },
+                                );
                             });
-                        if let Some(version) = install_request {
-                            let game_dir =
-                                hmcl_core::download::default_game_dir(&crate::data_dir());
-                            self.install = Some(spawn_install(version, game_dir));
-                        }
+
+                            ui.add_space(8.0);
+                            let mut install_request: Option<RemoteVersion> = None;
+                            egui::ScrollArea::vertical()
+                                .max_height(ui.available_height())
+                                .show(ui, |ui| match (&self.manifest, &self.error) {
+                                    (Some(manifest), _) => {
+                                        install_request = self.version_list(ui, manifest);
+                                    }
+                                    (None, Some(error)) => {
+                                        hint(
+                                            ui,
+                                            ToastKind::Error,
+                                            &crate::i18n::tr("download.failed"),
+                                        );
+                                        ui.label(error);
+                                    }
+                                    _ => {
+                                        ui.horizontal(|ui| {
+                                            crate::widgets::spinner(ui, 20.0);
+                                            ui.label(crate::i18n::tr("download.content"));
+                                        });
+                                    }
+                                });
+                            if let Some(version) = install_request {
+                                let game_dir =
+                                    hmcl_core::download::default_game_dir(&crate::data_dir());
+                                self.install = Some(spawn_install(version, game_dir));
+                            }
+                        });
                     });
-                });
             });
 
         // Install progress dialog.
@@ -183,10 +200,7 @@ impl DownloadPage {
                 let matches_tab = match self.tab {
                     0 => version_type == VersionType::Release,
                     1 => version_type == VersionType::Snapshot,
-                    _ => matches!(
-                        version_type,
-                        VersionType::OldBeta | VersionType::OldAlpha
-                    ),
+                    _ => matches!(version_type, VersionType::OldBeta | VersionType::OldAlpha),
                 };
                 matches_tab && (search.is_empty() || version.id.to_lowercase().contains(&search))
             })
@@ -197,8 +211,14 @@ impl DownloadPage {
             .num_columns(3)
             .spacing(egui::vec2(24.0, 2.0))
             .show(ui, |ui| {
-                ui.label(RichText::new(crate::i18n::tr("world.game_version")).color(palette.on_surface_variant));
-                ui.label(RichText::new(crate::i18n::tr("instance.game.release")).color(palette.on_surface_variant));
+                ui.label(
+                    RichText::new(crate::i18n::tr("world.game_version"))
+                        .color(palette.on_surface_variant),
+                );
+                ui.label(
+                    RichText::new(crate::i18n::tr("instance.game.release"))
+                        .color(palette.on_surface_variant),
+                );
                 ui.end_row();
                 for version in show_versions {
                     // Row: grass icon + version id, type label, install icon.
@@ -206,14 +226,15 @@ impl DownloadPage {
                         if let Some(icon_texture) =
                             crate::image::texture(ctx_of(ui), "img/grass.png")
                         {
-                            let rect = egui::Rect::from_min_size(
-                                ui.cursor().min,
-                                egui::vec2(20.0, 20.0),
-                            );
+                            let rect =
+                                egui::Rect::from_min_size(ui.cursor().min, egui::vec2(20.0, 20.0));
                             ui.painter().image(
                                 icon_texture.id(),
                                 rect,
-                                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::Pos2::new(1.0, 1.0)),
+                                egui::Rect::from_min_max(
+                                    egui::Pos2::ZERO,
+                                    egui::Pos2::new(1.0, 1.0),
+                                ),
                                 egui::Color32::WHITE,
                             );
                             ui.advance_cursor_after_rect(rect);
@@ -254,4 +275,3 @@ impl DownloadPage {
 fn ctx_of(ui: &egui::Ui) -> &egui::Context {
     ui.ctx()
 }
-

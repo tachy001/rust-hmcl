@@ -15,9 +15,13 @@ pub const BUTTON_HEIGHT: f32 = 36.0;
 pub fn filled_button(ui: &mut Ui, id: egui::Id, label: &str, icon_name: Option<&str>) -> Response {
     let palette = theme::palette();
     let text_width = ui.fonts(|f| {
-        f.layout_no_wrap(label.to_owned(), egui::FontId::proportional(14.0), palette.on_primary)
-            .size()
-            .x
+        f.layout_no_wrap(
+            label.to_owned(),
+            egui::FontId::proportional(14.0),
+            palette.on_primary,
+        )
+        .size()
+        .x
     });
     let icon_space = if icon_name.is_some() { 28.0 } else { 0.0 };
     let (rect, response) = ui.allocate_exact_size(
@@ -35,7 +39,8 @@ pub fn filled_button(ui: &mut Ui, id: egui::Id, label: &str, icon_name: Option<&
         .rect_filled(rect, CornerRadius::same((BUTTON_HEIGHT / 2.0) as u8), bg);
     let mut x = rect.min.x + 16.0;
     if let Some(icon_name) = icon_name {
-        let icon_rect = Rect::from_min_size(Pos2::new(x, rect.center().y - 10.0), Vec2::splat(20.0));
+        let icon_rect =
+            Rect::from_min_size(Pos2::new(x, rect.center().y - 10.0), Vec2::splat(20.0));
         icon::icon_in_rect(ui.painter(), icon_rect, icon_name, fg);
         x += icon_space;
     }
@@ -51,12 +56,21 @@ pub fn filled_button(ui: &mut Ui, id: egui::Id, label: &str, icon_name: Option<&
 }
 
 /// An outlined (secondary) button with an optional leading icon.
-pub fn outlined_button(ui: &mut Ui, id: egui::Id, label: &str, icon_name: Option<&str>) -> Response {
+pub fn outlined_button(
+    ui: &mut Ui,
+    id: egui::Id,
+    label: &str,
+    icon_name: Option<&str>,
+) -> Response {
     let palette = theme::palette();
     let text_width = ui.fonts(|f| {
-        f.layout_no_wrap(label.to_owned(), egui::FontId::proportional(14.0), palette.on_surface)
-            .size()
-            .x
+        f.layout_no_wrap(
+            label.to_owned(),
+            egui::FontId::proportional(14.0),
+            palette.on_surface,
+        )
+        .size()
+        .x
     });
     let icon_space = if icon_name.is_some() { 28.0 } else { 0.0 };
     let (rect, response) = ui.allocate_exact_size(
@@ -78,7 +92,8 @@ pub fn outlined_button(ui: &mut Ui, id: egui::Id, label: &str, icon_name: Option
     );
     let mut x = rect.min.x + 16.0;
     if let Some(icon_name) = icon_name {
-        let icon_rect = Rect::from_min_size(Pos2::new(x, rect.center().y - 10.0), Vec2::splat(20.0));
+        let icon_rect =
+            Rect::from_min_size(Pos2::new(x, rect.center().y - 10.0), Vec2::splat(20.0));
         icon::icon_in_rect(ui.painter(), icon_rect, icon_name, palette.primary);
         x += icon_space;
     }
@@ -97,20 +112,26 @@ pub fn outlined_button(ui: &mut Ui, id: egui::Id, label: &str, icon_name: Option
 pub fn text_button(ui: &mut Ui, id: egui::Id, label: &str, primary: bool) -> Response {
     let palette = theme::palette();
     let text_width = ui.fonts(|f| {
-        f.layout_no_wrap(label.to_owned(), egui::FontId::proportional(14.0), palette.on_surface)
-            .size()
-            .x
+        f.layout_no_wrap(
+            label.to_owned(),
+            egui::FontId::proportional(14.0),
+            palette.on_surface,
+        )
+        .size()
+        .x
     });
-    let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(text_width + 32.0, BUTTON_HEIGHT),
-        Sense::click(),
-    );
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(text_width + 32.0, BUTTON_HEIGHT), Sense::click());
     let fill = if response.hovered() {
         palette.surface_container_highest
     } else {
         egui::Color32::TRANSPARENT
     };
-    let fg = if primary { palette.primary } else { palette.on_surface_variant };
+    let fg = if primary {
+        palette.primary
+    } else {
+        palette.on_surface_variant
+    };
     ui.painter()
         .rect_filled(rect, CornerRadius::same((BUTTON_HEIGHT / 2.0) as u8), fill);
     ui.painter().text(
@@ -133,10 +154,8 @@ pub fn icon_button(ui: &mut Ui, id: egui::Id, icon_name: &str, size: f32) -> Res
     } else {
         egui::Color32::TRANSPARENT
     };
-    ui.painter()
-        .circle_filled(rect.center(), size / 2.0, bg);
+    ui.painter().circle_filled(rect.center(), size / 2.0, bg);
     icon::icon_in_rect(ui.painter(), rect, icon_name, palette.on_surface_variant);
     let _ = id;
     response
 }
-

@@ -42,11 +42,7 @@ pub fn texture(ctx: &Context, asset: &str) -> Option<TextureHandle> {
     }
     let path = crate::assets_dir().join(asset);
     let image = decode_file(&path).ok()?;
-    let handle = ctx.load_texture(
-        asset.to_owned(),
-        image,
-        TextureOptions::LINEAR,
-    );
+    let handle = ctx.load_texture(asset.to_owned(), image, TextureOptions::LINEAR);
     cache()
         .lock()
         .unwrap()

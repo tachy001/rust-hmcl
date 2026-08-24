@@ -32,7 +32,10 @@ pub fn spinner(ui: &mut Ui, size: f32) {
 /// A progress bar with percentage text.
 pub fn progress_bar(ui: &mut Ui, fraction: f32, height: f32) {
     let palette = theme::palette();
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), height), egui::Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(
+        Vec2::new(ui.available_width(), height),
+        egui::Sense::hover(),
+    );
     let radius_u8 = (height / 2.0) as u8;
     ui.painter().rect_filled(
         rect,
@@ -42,11 +45,8 @@ pub fn progress_bar(ui: &mut Ui, fraction: f32, height: f32) {
     let fill_width = (rect.width() * fraction.clamp(0.0, 1.0)).max(0.0);
     if fill_width > 0.0 {
         let fill = Rect::from_min_max(rect.min, Pos2::new(rect.min.x + fill_width, rect.max.y));
-        ui.painter().rect_filled(
-            fill,
-            egui::CornerRadius::same(radius_u8),
-            palette.primary,
-        );
+        ui.painter()
+            .rect_filled(fill, egui::CornerRadius::same(radius_u8), palette.primary);
     }
     ui.painter().text(
         rect.center(),

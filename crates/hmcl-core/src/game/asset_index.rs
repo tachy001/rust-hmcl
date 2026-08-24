@@ -54,7 +54,10 @@ mod tests {
             hash: "0123456789abcdef0123456789abcdef01234567".to_owned(),
             size: 1234,
         };
-        assert_eq!(object.object_path(), "01/0123456789abcdef0123456789abcdef01234567");
+        assert_eq!(
+            object.object_path(),
+            "01/0123456789abcdef0123456789abcdef01234567"
+        );
     }
 
     #[test]

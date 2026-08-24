@@ -8,9 +8,9 @@ pub mod file;
 pub mod install;
 pub mod version_list;
 
-pub use file::{download_file, file_matches_sha1, file_matches_size, DownloadProgress};
-pub use install::{fetch_resolved_version, spawn_install, InstallStatus, InstallTask};
-pub use version_list::{fetch_version_manifest, RemoteVersion, VersionManifest, VersionType};
+pub use file::{DownloadProgress, download_file, file_matches_sha1, file_matches_size};
+pub use install::{InstallStatus, InstallTask, fetch_resolved_version, spawn_install};
+pub use version_list::{RemoteVersion, VersionManifest, VersionType, fetch_version_manifest};
 
 /// The Mojang download provider, mirroring `MojangDownloadProvider`.
 pub const MOJANG_VERSION_MANIFEST_URL: &str =

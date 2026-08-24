@@ -3,8 +3,8 @@
 //! Port of HMCL's `task.FileDownloadTask` essentials.
 
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use futures_util::StreamExt;
 
@@ -115,10 +115,11 @@ pub async fn download_file(
     drop(file);
 
     if let Some(expected) = sha1
-        && !file_matches_sha1(&tmp, expected) {
-            let _ = std::fs::remove_file(&tmp);
-            anyhow::bail!("checksum mismatch for {url}");
-        }
+        && !file_matches_sha1(&tmp, expected)
+    {
+        let _ = std::fs::remove_file(&tmp);
+        anyhow::bail!("checksum mismatch for {url}");
+    }
     std::fs::rename(&tmp, dest)?;
     Ok(())
 }

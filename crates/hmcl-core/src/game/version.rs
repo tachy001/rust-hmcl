@@ -1,4 +1,4 @@
-﻿//! The version JSON model (`versions/<id>/<id>.json`).
+//! The version JSON model (`versions/<id>/<id>.json`).
 //!
 //! Port of HMCL's `GameInstanceManifest` fields (vanilla subset plus
 //! inheritance support).
@@ -109,9 +109,7 @@ impl GameVersion {
         let jar_id = self.jar.as_deref().unwrap_or(&self.id);
         DownloadInfo {
             path: None,
-            url: format!(
-                "https://launcher.mojang.com/v1/objects/{jar_id}/{jar_id}.jar"
-            ),
+            url: format!("https://launcher.mojang.com/v1/objects/{jar_id}/{jar_id}.jar"),
             sha1: None,
             size: None,
         }
@@ -132,9 +130,7 @@ impl GameVersion {
         };
         AssetIndexInfo {
             id: assets_id.to_owned(),
-            url: format!(
-                "https://piston-meta.mojang.com/v1/packages/{hash}/{assets_id}.json"
-            ),
+            url: format!("https://piston-meta.mojang.com/v1/packages/{hash}/{assets_id}.json"),
             sha1: None,
             size: None,
             total_size: None,
@@ -168,7 +164,10 @@ impl GameVersion {
             .compatibility_rules
             .extend(parent.compatibility_rules.iter().cloned());
         for (key, value) in &parent.downloads {
-            merged.downloads.entry(key.clone()).or_insert_with(|| value.clone());
+            merged
+                .downloads
+                .entry(key.clone())
+                .or_insert_with(|| value.clone());
         }
         if merged.logging.is_empty() {
             merged.logging = parent.logging.clone();
@@ -184,5 +183,3 @@ impl GameVersion {
             .unwrap_or(8)
     }
 }
-
-

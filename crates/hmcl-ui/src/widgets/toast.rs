@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use egui::{Align2, Align, Color32, Context, CornerRadius, Id, Layout, RichText, Vec2};
+use egui::{Align, Align2, Color32, Context, CornerRadius, Id, Layout, RichText, Vec2};
 
 use crate::theme;
 use crate::widgets::icon;
@@ -154,7 +154,12 @@ pub fn hint(ui: &mut egui::Ui, kind: ToastKind, text: &str) {
 
 /// A translucent rounded "card" container used by pages so the wallpaper
 /// shows through slightly (port of HMCL's layered surfaces).
-pub fn card<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> egui::InnerResponse<R> {
+///
+/// Contents are laid out vertically regardless of the caller's layout.
+pub fn card<R>(
+    ui: &mut egui::Ui,
+    add_contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
     let palette = theme::palette();
     egui::Frame::new()
         .fill(palette.surface.gamma_multiply(0.86))
@@ -164,7 +169,10 @@ pub fn card<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R)
         ))
         .corner_radius(CornerRadius::same(10))
         .inner_margin(egui::Margin::symmetric(16, 14))
-        .show(ui, add_contents)
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.vertical(add_contents).inner
+        })
 }
 
 /// Show a frame helper used by hint banners.
@@ -178,4 +186,3 @@ pub fn hint_frame(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui)) {
             ui.with_layout(Layout::top_down(Align::Min), add_contents);
         });
 }
-

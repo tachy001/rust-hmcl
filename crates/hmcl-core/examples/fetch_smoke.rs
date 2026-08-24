@@ -1,6 +1,6 @@
 //! Smoke test: fetch and resolve real version manifests from Mojang.
-use hmcl_core::download::version_list::RemoteVersion;
 use hmcl_core::download::fetch_resolved_version;
+use hmcl_core::download::version_list::RemoteVersion;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

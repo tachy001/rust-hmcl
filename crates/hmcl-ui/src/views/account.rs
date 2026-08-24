@@ -7,20 +7,17 @@ use std::time::{Duration, Instant};
 use egui::{Align2, Context, Id, Pos2, Rect, RichText, Ui};
 
 use hmcl_core::auth::microsoft::{DeviceCodeResponse, DeviceTokenResponse, MicrosoftAuthenticator};
-use hmcl_core::auth::{offline_uuid, Account, AccountStorage};
+use hmcl_core::auth::{Account, AccountStorage, offline_uuid};
 
-use crate::async_runtime::{spawn, AsyncTask};
+use crate::async_runtime::{AsyncTask, spawn};
 use crate::theme;
 use crate::widgets::dialog::{Dialog, DialogResult};
-use crate::widgets::toast::{hint, ToastKind, Toasts};
+use crate::widgets::toast::{ToastKind, Toasts, hint};
 
 /// The login dialog currently shown (if any).
 pub enum LoginDialog {
     MethodSelect,
-    Offline {
-        name: String,
-        error: Option<String>,
-    },
+    Offline { name: String, error: Option<String> },
     Microsoft(Box<MsLoginState>),
 }
 
@@ -49,79 +46,82 @@ impl AccountPage {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ctx, |ui| {
-                ui.add_space(20.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(24.0);
-                    crate::widgets::card(ui, |ui| {
-                        ui.set_width(480.0);
-                        page_header(ui, "account");
-                        ui.add_space(8.0);
-                        if accounts.accounts.is_empty() {
-                            ui.vertical_centered(|ui| {
-                                ui.add_space(32.0);
-                                ui.label(
-                                    RichText::new(crate::i18n::tr("account.empty"))
-                                        .color(palette.on_surface_variant),
-                                );
-                                ui.add_space(8.0);
-                                if crate::widgets::filled_button(
-                                    ui,
-                                    ui.id().with("add_account"),
-                                    &crate::i18n::tr("account.missing.add"),
-                                    Some("ADD"),
-                                )
-                                .clicked()
-                                {
-                                    self.dialog = Some(LoginDialog::MethodSelect);
-                                }
-                                ui.add_space(24.0);
-                            });
-                        } else {
-                            let mut remove_index = None;
-                            let mut copied = false;
-                            for (index, account) in accounts.accounts.iter().enumerate() {
-                                let selected = accounts.selected.as_deref() == Some(account.uuid());
-                                let response = crate::widgets::two_line_list_item(
-                                    ui,
-                                    ui.id().with(("account", account.uuid())),
-                                    Some("PERSON"),
-                                    account.username(),
-                                    &format!("UUID: {}", account.uuid_dashed()),
-                                    selected,
-                                    true,
-                                );
-                                if response.clicked() {
-                                    accounts.selected = Some(account.uuid().to_owned());
-                                }
-                                response.context_menu(|ui| {
-                                    if ui.button(crate::i18n::tr("account.copy_uuid")).clicked() {
-                                        ui.ctx().copy_text(account.uuid_dashed());
-                                        copied = true;
-                                        ui.close();
-                                    }
-                                    if ui.button(crate::i18n::tr("button.remove")).clicked() {
-                                        remove_index = Some(index);
-                                        ui.close();
-                                    }
-                                });
-                            }
-                            if copied {
-                                toasts.info(crate::i18n::tr("message.copied"));
-                            }
-                            if let Some(index) = remove_index {
-                                let account = accounts.accounts[index].clone();
-                                accounts.accounts.remove(index);
-                                if accounts.selected.as_deref() == Some(account.uuid()) {
-                                    accounts.selected = None;
-                                }
-                                if let Err(e) = accounts.save(&crate::data_dir().join("accounts.json")) {
-                                    toasts.error(format!("{e}"));
-                                }
-                            }
+                egui::Frame::new()
+                    .inner_margin(egui::Margin::same(20))
+                    .show(ui, |ui| {
+                        crate::widgets::card(ui, |ui| {
+                            page_header(ui, "account");
                             ui.add_space(8.0);
-                        }
+                            if accounts.accounts.is_empty() {
+                                ui.vertical_centered(|ui| {
+                                    ui.add_space(32.0);
+                                    ui.label(
+                                        RichText::new(crate::i18n::tr("account.empty"))
+                                            .color(palette.on_surface_variant),
+                                    );
+                                    ui.add_space(8.0);
+                                    if crate::widgets::filled_button(
+                                        ui,
+                                        ui.id().with("add_account"),
+                                        &crate::i18n::tr("account.missing.add"),
+                                        Some("ADD"),
+                                    )
+                                    .clicked()
+                                    {
+                                        self.dialog = Some(LoginDialog::MethodSelect);
+                                    }
+                                    ui.add_space(24.0);
+                                });
+                            } else {
+                                let mut remove_index = None;
+                                let mut copied = false;
+                                for (index, account) in accounts.accounts.iter().enumerate() {
+                                    let selected =
+                                        accounts.selected.as_deref() == Some(account.uuid());
+                                    let response = crate::widgets::two_line_list_item(
+                                        ui,
+                                        ui.id().with(("account", account.uuid())),
+                                        Some("PERSON"),
+                                        account.username(),
+                                        &format!("UUID: {}", account.uuid_dashed()),
+                                        selected,
+                                        true,
+                                    );
+                                    if response.clicked() {
+                                        accounts.selected = Some(account.uuid().to_owned());
+                                    }
+                                    response.context_menu(|ui| {
+                                        if ui.button(crate::i18n::tr("account.copy_uuid")).clicked()
+                                        {
+                                            ui.ctx().copy_text(account.uuid_dashed());
+                                            copied = true;
+                                            ui.close();
+                                        }
+                                        if ui.button(crate::i18n::tr("button.remove")).clicked() {
+                                            remove_index = Some(index);
+                                            ui.close();
+                                        }
+                                    });
+                                }
+                                if copied {
+                                    toasts.info(crate::i18n::tr("message.copied"));
+                                }
+                                if let Some(index) = remove_index {
+                                    let account = accounts.accounts[index].clone();
+                                    accounts.accounts.remove(index);
+                                    if accounts.selected.as_deref() == Some(account.uuid()) {
+                                        accounts.selected = None;
+                                    }
+                                    if let Err(e) =
+                                        accounts.save(&crate::data_dir().join("accounts.json"))
+                                    {
+                                        toasts.error(format!("{e}"));
+                                    }
+                                }
+                                ui.add_space(8.0);
+                            }
+                        });
                     });
-                });
 
                 // Floating action button, bottom-right.
                 if !accounts.accounts.is_empty() {
@@ -133,7 +133,8 @@ impl AccountPage {
                         ),
                         egui::vec2(fab_size, fab_size),
                     );
-                    let response = ui.interact(fab_rect, ui.id().with("fab_add"), egui::Sense::click());
+                    let response =
+                        ui.interact(fab_rect, ui.id().with("fab_add"), egui::Sense::click());
                     ui.painter().circle_filled(
                         fab_rect.center(),
                         fab_size / 2.0,
@@ -175,15 +176,19 @@ impl AccountPage {
                     .positive_text(None)
                     .show(ctx, |ui| {
                         ui.add_space(4.0);
-                        if method_button(ui, "PERSON", &crate::i18n::tr("account.methods.offline")) {
+                        if method_button(ui, "PERSON", &crate::i18n::tr("account.methods.offline"))
+                        {
                             next = Some(LoginDialog::Offline {
                                 name: String::new(),
                                 error: None,
                             });
                         }
                         ui.add_space(6.0);
-                        if method_button(ui, "MICROSOFT", &crate::i18n::tr("account.methods.microsoft"))
-                        {
+                        if method_button(
+                            ui,
+                            "MICROSOFT",
+                            &crate::i18n::tr("account.methods.microsoft"),
+                        ) {
                             next = Some(LoginDialog::Microsoft(Box::new(
                                 MsLoginState::Requesting(request_device_code()),
                             )));
@@ -199,23 +204,26 @@ impl AccountPage {
             LoginDialog::Offline { mut name, error } => {
                 let mut next: Option<LoginDialog> = None;
                 let mut error = error;
-                let result = Dialog::new(Id::new("login_offline"), crate::i18n::tr("account.methods.offline"))
-                    .positive_text(Some(crate::i18n::tr("account.login")))
-                    .positive_enabled(!name.trim().is_empty())
-                    .show(ctx, |ui| {
-                        ui.add_space(4.0);
-                        ui.label(crate::i18n::tr("account.username"));
-                        crate::widgets::rounded_text_edit_singleline(
-                            ui,
-                            &mut name,
-                            "",
-                            ui.available_width(),
-                        );
-                        if let Some(message) = &error {
-                            hint(ui, ToastKind::Error, message);
-                        }
-                        ui.add_space(4.0);
-                    });
+                let result = Dialog::new(
+                    Id::new("login_offline"),
+                    crate::i18n::tr("account.methods.offline"),
+                )
+                .positive_text(Some(crate::i18n::tr("account.login")))
+                .positive_enabled(!name.trim().is_empty())
+                .show(ctx, |ui| {
+                    ui.add_space(4.0);
+                    ui.label(crate::i18n::tr("account.username"));
+                    crate::widgets::rounded_text_edit_singleline(
+                        ui,
+                        &mut name,
+                        "",
+                        ui.available_width(),
+                    );
+                    if let Some(message) = &error {
+                        hint(ui, ToastKind::Error, message);
+                    }
+                    ui.add_space(4.0);
+                });
                 match result {
                     None => {
                         // Still open: keep the dialog with updated input.
@@ -283,37 +291,31 @@ impl AccountPage {
                             *poll = Some(spawn_poll(device_code));
                         }
                         if let Some(task) = poll
-                            && let Some(result) = task.poll() {
-                                match result {
-                                    Ok(Some(token)) => {
-                                        let authenticator = MicrosoftAuthenticator::new();
-                                        let access = token.access_token.clone();
-                                        let refresh = token.refresh_token.clone();
-                                        transition =
-                                            Some(MsLoginState::Authenticating(spawn(
-                                                async move {
-                                                    authenticator
-                                                        .authenticate_with_access_token(
-                                                            &access,
-                                                            &refresh,
-                                                        )
-                                                        .await
-                                                        .map_err(|e| e.to_string())
-                                                },
-                                            )));
-                                    }
-                                    Ok(None) => {
-                                        *next_poll_at = Instant::now()
-                                            + Duration::from_secs(
-                                                device.interval.max(1) as u64,
-                                            );
-                                        *poll = None;
-                                    }
-                                    Err(e) => {
-                                        *error = Some(e);
-                                    }
+                            && let Some(result) = task.poll()
+                        {
+                            match result {
+                                Ok(Some(token)) => {
+                                    let authenticator = MicrosoftAuthenticator::new();
+                                    let access = token.access_token.clone();
+                                    let refresh = token.refresh_token.clone();
+                                    transition =
+                                        Some(MsLoginState::Authenticating(spawn(async move {
+                                            authenticator
+                                                .authenticate_with_access_token(&access, &refresh)
+                                                .await
+                                                .map_err(|e| e.to_string())
+                                        })));
+                                }
+                                Ok(None) => {
+                                    *next_poll_at = Instant::now()
+                                        + Duration::from_secs(device.interval.max(1) as u64);
+                                    *poll = None;
+                                }
+                                Err(e) => {
+                                    *error = Some(e);
                                 }
                             }
+                        }
                         if let Some(message) = error {
                             hint(ui, ToastKind::Error, message);
                         }
@@ -368,10 +370,8 @@ fn page_header(ui: &mut Ui, title_key: &str) {
 /// A large method-selection button for the login dialog.
 fn method_button(ui: &mut Ui, icon_name: &str, label: &str) -> bool {
     let palette = theme::palette();
-    let (rect, response) = ui.allocate_exact_size(
-        egui::vec2(ui.available_width(), 52.0),
-        egui::Sense::click(),
-    );
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 52.0), egui::Sense::click());
     let bg = if response.hovered() {
         palette.surface_container_highest
     } else {
@@ -406,21 +406,17 @@ fn show_device_code(ui: &mut Ui, device: &DeviceCodeResponse, toasts: &mut Toast
                 .size(24.0)
                 .color(palette.primary),
         );
-        if ui
-            .small_button(crate::i18n::tr("button.copy"))
-            .clicked()
-        {
+        if ui.small_button(crate::i18n::tr("button.copy")).clicked() {
             ui.ctx().copy_text(device.user_code.clone());
             toasts.info(crate::i18n::tr("message.copied"));
         }
     });
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        ui.label(crate::i18n::tr("account.methods.microsoft.methods.device.hint"));
-        if ui
-            .link(device.verification_uri.clone())
-            .clicked()
-        {
+        ui.label(crate::i18n::tr(
+            "account.methods.microsoft.methods.device.hint",
+        ));
+        if ui.link(device.verification_uri.clone()).clicked() {
             let _ = webbrowser::open(&device.verification_uri);
         }
     });
@@ -456,6 +452,3 @@ pub fn save_accounts(accounts: &AccountStorage, toasts: &mut Toasts) {
         toasts.error(format!("{e}"));
     }
 }
-
-
-

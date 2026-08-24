@@ -101,12 +101,12 @@ impl VersionRange {
             return true;
         }
         match (&self.minimum, &self.maximum) {
-            (None, Some(max)) => {
-                that.minimum.as_ref().is_none_or(|min| min <= max)
-            }
+            (None, Some(max)) => that.minimum.as_ref().is_none_or(|min| min <= max),
             (Some(min), None) => that.maximum.as_ref().is_none_or(|max| max >= min),
             (Some(min), Some(max)) => {
-                that.contains(min) || that.contains(max) || that.minimum.as_ref().is_some_and(|m| self.contains(m))
+                that.contains(min)
+                    || that.contains(max)
+                    || that.minimum.as_ref().is_some_and(|m| self.contains(m))
             }
             (None, None) => true,
         }

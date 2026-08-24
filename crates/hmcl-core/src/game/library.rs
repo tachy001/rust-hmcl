@@ -126,7 +126,9 @@ impl Artifact {
 
     /// The classifier used for native libraries on `os` (e.g. `natives-windows`).
     pub fn native_classifier(&self, os: &str) -> Option<String> {
-        self.classifier.clone().or_else(|| Some(format!("natives-{os}")))
+        self.classifier
+            .clone()
+            .or_else(|| Some(format!("natives-{os}")))
     }
 }
 
@@ -224,7 +226,10 @@ mod tests {
         let with_at_ext = Artifact::parse("com.example:mod:1.0:universal@zip").unwrap();
         assert_eq!(with_at_ext.classifier.as_deref(), Some("universal"));
         assert_eq!(with_at_ext.extension, "zip");
-        assert_eq!(with_at_ext.path(), "com/example/mod/1.0/mod-1.0-universal.zip");
+        assert_eq!(
+            with_at_ext.path(),
+            "com/example/mod/1.0/mod-1.0-universal.zip"
+        );
     }
 
     #[test]
@@ -263,4 +268,3 @@ mod tests {
         assert!(library.native_download("freebsd").is_none());
     }
 }
-

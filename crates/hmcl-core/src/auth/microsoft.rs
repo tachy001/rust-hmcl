@@ -16,13 +16,11 @@ pub fn client_id() -> String {
 }
 
 const SCOPE: &str = "XboxLive.signin offline_access";
-const DEVICE_CODE_URL: &str =
-    "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
+const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const XBL_AUTH_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XSTS_AUTH_URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
-const MC_LOGIN_URL: &str =
-    "https://api.minecraftservices.com/authentication/login_with_xbox";
+const MC_LOGIN_URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 const MC_STORE_URL: &str = "https://api.minecraftservices.com/entitlements/mcstore";
 const MC_PROFILE_URL: &str = "https://api.minecraftservices.com/minecraft/profile";
 
@@ -121,8 +119,8 @@ impl MicrosoftAuthenticator {
         let status = response.status();
         let text = response.text().await?;
         if status.is_success() {
-            let token: DeviceTokenResponse = serde_json::from_str(&text)
-                .map_err(|_| AuthError::MalformedResponse)?;
+            let token: DeviceTokenResponse =
+                serde_json::from_str(&text).map_err(|_| AuthError::MalformedResponse)?;
             return Ok(Some(token));
         }
         let error: DeviceTokenError = serde_json::from_str(&text).unwrap_or(DeviceTokenError {
@@ -250,7 +248,10 @@ impl MicrosoftAuthenticator {
         }
     }
 
-    async fn fetch_profile(&self, access_token: &str) -> Result<MinecraftProfileResponse, AuthError> {
+    async fn fetch_profile(
+        &self,
+        access_token: &str,
+    ) -> Result<MinecraftProfileResponse, AuthError> {
         Ok(self
             .client
             .get(MC_PROFILE_URL)

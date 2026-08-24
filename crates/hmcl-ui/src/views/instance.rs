@@ -32,17 +32,20 @@ impl InstancePage {
     fn scan(&mut self) {
         let now = Instant::now();
         if let Some(last) = self.last_scan
-            && now.duration_since(last) < Duration::from_secs(1) {
-                return;
-            }
+            && now.duration_since(last) < Duration::from_secs(1)
+        {
+            return;
+        }
         self.last_scan = Some(now);
 
-        let versions_dir = hmcl_core::download::default_game_dir(&crate::data_dir())
-            .join("versions");
+        let versions_dir =
+            hmcl_core::download::default_game_dir(&crate::data_dir()).join("versions");
         let mut versions = Vec::new();
         if let Ok(entries) = std::fs::read_dir(&versions_dir) {
             for entry in entries.flatten() {
-                let json_path = entry.path().join(format!("{}.json", entry.file_name().to_string_lossy()));
+                let json_path = entry
+                    .path()
+                    .join(format!("{}.json", entry.file_name().to_string_lossy()));
                 if !json_path.exists() {
                     continue;
                 }
@@ -79,54 +82,53 @@ pub fn show(ctx: &Context, page: &mut InstancePage) {
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE)
         .show(ctx, |ui| {
-            ui.add_space(20.0);
-            ui.horizontal(|ui| {
-                ui.add_space(24.0);
-                crate::widgets::card(ui, |ui| {
-                    ui.set_width(560.0);
-                    ui.label(
-                        RichText::new(crate::i18n::tr("instance.manage"))
-                            .size(20.0)
-                            .color(palette.on_surface),
-                    );
-                    ui.add_space(12.0);
-                    if page.versions.is_empty() {
-                        ui.vertical_centered(|ui| {
-                            ui.add_space(24.0);
-                            ui.label(
-                                RichText::new(crate::i18n::tr("instance.empty"))
-                                    .color(palette.on_surface_variant)
-                                    .size(15.0),
-                            );
-                            ui.add_space(6.0);
-                            ui.label(
-                                RichText::new(crate::i18n::tr("instance.empty.add"))
-                                    .color(palette.on_surface_variant)
-                                    .size(13.0),
-                            );
-                            ui.add_space(24.0);
-                        });
-                    } else {
-                        for version in &page.versions {
-                            let type_label = match version.version_type.as_str() {
-                                "release" => crate::i18n::tr("instance.game.release"),
-                                "snapshot" => crate::i18n::tr("instance.game.snapshot"),
-                                other => other.to_owned(),
-                            };
-                            crate::widgets::two_line_list_item(
-                                ui,
-                                ui.id().with(("version", &version.id)),
-                                Some("GRASS"),
-                                &version.id,
-                                &type_label,
-                                false,
-                                true,
-                            );
+            egui::Frame::new()
+                .inner_margin(egui::Margin::same(20))
+                .show(ui, |ui| {
+                    crate::widgets::card(ui, |ui| {
+                        ui.label(
+                            RichText::new(crate::i18n::tr("instance.manage"))
+                                .size(20.0)
+                                .color(palette.on_surface),
+                        );
+                        ui.add_space(12.0);
+                        if page.versions.is_empty() {
+                            ui.vertical_centered(|ui| {
+                                ui.add_space(24.0);
+                                ui.label(
+                                    RichText::new(crate::i18n::tr("instance.empty"))
+                                        .color(palette.on_surface_variant)
+                                        .size(15.0),
+                                );
+                                ui.add_space(6.0);
+                                ui.label(
+                                    RichText::new(crate::i18n::tr("instance.empty.add"))
+                                        .color(palette.on_surface_variant)
+                                        .size(13.0),
+                                );
+                                ui.add_space(24.0);
+                            });
+                        } else {
+                            for version in &page.versions {
+                                let type_label = match version.version_type.as_str() {
+                                    "release" => crate::i18n::tr("instance.game.release"),
+                                    "snapshot" => crate::i18n::tr("instance.game.snapshot"),
+                                    other => other.to_owned(),
+                                };
+                                crate::widgets::two_line_list_item(
+                                    ui,
+                                    ui.id().with(("version", &version.id)),
+                                    Some("GRASS"),
+                                    &version.id,
+                                    &type_label,
+                                    false,
+                                    true,
+                                );
+                            }
+                            ui.add_space(8.0);
                         }
-                        ui.add_space(8.0);
-                    }
+                    });
                 });
-            });
         });
 }
 
@@ -137,64 +139,67 @@ pub fn show_game(ctx: &Context, accounts: &AccountStorage) {
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE)
         .show(ctx, |ui| {
-            ui.add_space(20.0);
-            ui.horizontal(|ui| {
-                ui.add_space(24.0);
-                crate::widgets::card(ui, |ui| {
-                    ui.set_width(560.0);
-                    ui.horizontal(|ui| {
-                        if let Some(logo) = crate::image::texture(ctx, "img/icon-title.png") {
-                            let size = logo.size_vec2();
-                            let scale = 24.0 / size.y;
-                            let rect = egui::Rect::from_min_size(ui.cursor().min, size * scale);
-                            ui.painter().image(
-                                logo.id(),
-                                rect,
-                                egui::Rect::from_min_max(
-                                    egui::Pos2::new(1.0, 1.0),
-                                    egui::Pos2::ZERO,
-                                ),
-                                egui::Color32::WHITE,
+            egui::Frame::new()
+                .inner_margin(egui::Margin::same(20))
+                .show(ui, |ui| {
+                    crate::widgets::card(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            if let Some(logo) = crate::image::texture(ctx, "img/icon-title.png") {
+                                let size = logo.size_vec2();
+                                let scale = 24.0 / size.y;
+                                let rect = egui::Rect::from_min_size(ui.cursor().min, size * scale);
+                                ui.painter().image(
+                                    logo.id(),
+                                    rect,
+                                    egui::Rect::from_min_max(
+                                        egui::Pos2::new(1.0, 1.0),
+                                        egui::Pos2::ZERO,
+                                    ),
+                                    egui::Color32::WHITE,
+                                );
+                                ui.advance_cursor_after_rect(rect);
+                            }
+                            ui.add_space(8.0);
+                            ui.label(
+                                RichText::new(crate::i18n::tr("instance"))
+                                    .size(20.0)
+                                    .color(palette.on_surface),
                             );
-                            ui.advance_cursor_after_rect(rect);
-                        }
-                        ui.add_space(8.0);
-                        ui.label(
-                            RichText::new(crate::i18n::tr("instance"))
-                                .size(20.0)
-                                .color(palette.on_surface),
-                        );
-                    });
-                    ui.add_space(20.0);
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(16.0);
-                        let account_name = accounts
-                            .selected
-                            .as_ref()
-                            .and_then(|uuid| accounts.accounts.iter().find(|a| a.uuid() == uuid))
-                            .map(|a| a.username().to_owned())
-                            .unwrap_or_else(|| crate::i18n::tr("account.missing"));
-                        ui.label(
-                            RichText::new(account_name)
-                                .size(18.0)
-                                .color(palette.on_surface),
-                        );
-                        ui.add_space(8.0);
-                        ui.label(
-                            RichText::new(crate::i18n::tr("instance.launch.empty"))
-                                .color(palette.on_surface_variant)
-                                .size(14.0),
-                        );
-                        ui.add_space(6.0);
-                        ui.label(
-                            RichText::new(crate::i18n::tr("instance.empty.launch.goto_download"))
+                        });
+                        ui.add_space(20.0);
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(16.0);
+                            let account_name = accounts
+                                .selected
+                                .as_ref()
+                                .and_then(|uuid| {
+                                    accounts.accounts.iter().find(|a| a.uuid() == uuid)
+                                })
+                                .map(|a| a.username().to_owned())
+                                .unwrap_or_else(|| crate::i18n::tr("account.missing"));
+                            ui.label(
+                                RichText::new(account_name)
+                                    .size(18.0)
+                                    .color(palette.on_surface),
+                            );
+                            ui.add_space(8.0);
+                            ui.label(
+                                RichText::new(crate::i18n::tr("instance.launch.empty"))
+                                    .color(palette.on_surface_variant)
+                                    .size(14.0),
+                            );
+                            ui.add_space(6.0);
+                            ui.label(
+                                RichText::new(crate::i18n::tr(
+                                    "instance.empty.launch.goto_download",
+                                ))
                                 .color(palette.primary)
                                 .size(13.0),
-                        );
-                        ui.add_space(24.0);
+                            );
+                            ui.add_space(24.0);
+                        });
                     });
                 });
-            });
         });
 }
 
@@ -205,88 +210,108 @@ pub fn show_settings(ctx: &Context, app: &mut HmclApp) {
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE)
         .show(ctx, |ui| {
-            ui.add_space(20.0);
-            ui.horizontal(|ui| {
-                ui.add_space(24.0);
-                crate::widgets::card(ui, |ui| {
-                    ui.set_width(560.0);
-                    ui.label(
-                        RichText::new(crate::i18n::tr("settings"))
-                            .size(20.0)
-                            .color(palette.on_surface),
-                    );
-                    ui.add_space(12.0);
-                    egui::ScrollArea::vertical()
-                        .max_height(ui.available_height())
-                        .show(ui, |ui| {
-                            section_title(ui, "settings.launcher.appearance");
+            egui::Frame::new()
+                .inner_margin(egui::Margin::same(20))
+                .show(ui, |ui| {
+                    crate::widgets::card(ui, |ui| {
+                        ui.label(
+                            RichText::new(crate::i18n::tr("settings"))
+                                .size(20.0)
+                                .color(palette.on_surface),
+                        );
+                        ui.add_space(12.0);
+                        egui::ScrollArea::vertical()
+                            .max_height(ui.available_height())
+                            .show(ui, |ui| {
+                                section_title(ui, "settings.launcher.appearance");
 
-                            // Brightness (appearance) selector.
-                            let mut appearance = app.appearance;
-                            ui.horizontal(|ui| {
-                                ui.label(crate::i18n::tr("settings.launcher.brightness"));
-                                let before = appearance;
-                                ui.radio_value(
-                                    &mut appearance,
-                                    Appearance::Light,
-                                    crate::i18n::tr("settings.launcher.brightness.light"),
-                                );
-                                ui.radio_value(
-                                    &mut appearance,
-                                    Appearance::Dark,
-                                    crate::i18n::tr("settings.launcher.brightness.dark"),
-                                );
-                                if appearance != before {
-                                    app.appearance = appearance;
-                                    app.apply_theme(ctx);
-                                    changed = true;
-                                }
-                            });
-
-                            // Accent color selector.
-                            ui.add_space(10.0);
-                            ui.label(crate::i18n::tr("settings.launcher.theme_color"));
-                            ui.horizontal(|ui| {
-                                for color in theme::STANDARD_COLORS {
-                                    let (rect, response) = ui.allocate_exact_size(
-                                        egui::vec2(28.0, 28.0),
-                                        egui::Sense::click(),
+                                // Brightness (appearance) selector.
+                                let mut appearance = app.appearance;
+                                ui.horizontal(|ui| {
+                                    ui.label(crate::i18n::tr("settings.launcher.brightness"));
+                                    let before = appearance;
+                                    ui.radio_value(
+                                        &mut appearance,
+                                        Appearance::Light,
+                                        crate::i18n::tr("settings.launcher.brightness.light"),
                                     );
-                                    let selected = app.accent == *color;
-                                    ui.painter().circle_filled(rect.center(), 12.0, color.color());
-                                    if selected {
-                                        ui.painter().circle_stroke(
-                                            rect.center(),
-                                            14.0,
-                                            egui::Stroke::new(2.0_f32, palette.on_surface),
-                                        );
-                                    }
-                                    if response.clicked() {
-                                        app.accent = *color;
+                                    ui.radio_value(
+                                        &mut appearance,
+                                        Appearance::Dark,
+                                        crate::i18n::tr("settings.launcher.brightness.dark"),
+                                    );
+                                    if appearance != before {
+                                        app.appearance = appearance;
                                         app.apply_theme(ctx);
                                         changed = true;
                                     }
-                                }
-                            });
+                                });
 
-                            // Wallpaper selector.
-                            ui.add_space(12.0);
-                            section_title(ui, "launcher.background");
-                            ui.label(crate::i18n::tr("launcher.background.builtin"));
-                            ui.horizontal_wrapped(|ui| {
-                                if wallpaper_button(ui, "none", "NONE", &app.config.wallpaper) { app.config.wallpaper = "none".to_owned(); changed = true; }
-                                for (id, _file) in BUILTIN_WALLPAPERS {
-                                    if wallpaper_button(ui, id, id, &app.config.wallpaper) { app.config.wallpaper = (*id).to_owned(); changed = true; }
+                                // Accent color selector.
+                                ui.add_space(10.0);
+                                ui.label(crate::i18n::tr("settings.launcher.theme_color"));
+                                ui.horizontal(|ui| {
+                                    for color in theme::STANDARD_COLORS {
+                                        let (rect, response) = ui.allocate_exact_size(
+                                            egui::vec2(28.0, 28.0),
+                                            egui::Sense::click(),
+                                        );
+                                        let selected = app.accent == *color;
+                                        ui.painter().circle_filled(
+                                            rect.center(),
+                                            12.0,
+                                            color.color(),
+                                        );
+                                        if selected {
+                                            ui.painter().circle_stroke(
+                                                rect.center(),
+                                                14.0,
+                                                egui::Stroke::new(2.0_f32, palette.on_surface),
+                                            );
+                                        }
+                                        if response.clicked() {
+                                            app.accent = *color;
+                                            app.apply_theme(ctx);
+                                            changed = true;
+                                        }
+                                    }
+                                });
+
+                                // Wallpaper selector.
+                                ui.add_space(12.0);
+                                section_title(ui, "launcher.background");
+                                ui.label(crate::i18n::tr("launcher.background.builtin"));
+                                ui.horizontal_wrapped(|ui| {
+                                    if wallpaper_button(ui, "none", "NONE", &app.config.wallpaper) {
+                                        app.config.wallpaper = "none".to_owned();
+                                        changed = true;
+                                    }
+                                    for (id, _file) in BUILTIN_WALLPAPERS {
+                                        if wallpaper_button(ui, id, id, &app.config.wallpaper) {
+                                            app.config.wallpaper = (*id).to_owned();
+                                            changed = true;
+                                        }
+                                    }
+                                });
+                                ui.add_space(10.0);
+                                ui.label(crate::i18n::tr(
+                                    "settings.launcher.background.settings.opacity",
+                                ));
+                                let mut opacity = app.config.background_opacity;
+                                if ui
+                                    .add(
+                                        egui::Slider::new(&mut opacity, 0.0..=1.0)
+                                            .show_value(false),
+                                    )
+                                    .changed()
+                                {
+                                    app.config.background_opacity = opacity;
+                                    changed = true;
                                 }
+                                ui.add_space(8.0);
                             });
-                            ui.add_space(10.0);
-                            ui.label(crate::i18n::tr("settings.launcher.background.settings.opacity"));
-                            let mut opacity = app.config.background_opacity;
-                            if ui.add(egui::Slider::new(&mut opacity, 0.0..=1.0).show_value(false)).changed() { app.config.background_opacity = opacity; changed = true; }
-                            ui.add_space(8.0);
-                        });
+                    });
                 });
-            });
         });
     if changed {
         app.save_config();

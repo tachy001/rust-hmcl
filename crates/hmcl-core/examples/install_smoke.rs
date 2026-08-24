@@ -1,7 +1,7 @@
 //! Smoke test: actually install a tiny version into a temp directory.
 use std::sync::Mutex;
 
-use hmcl_core::download::install::{install_version, InstallStatus};
+use hmcl_core::download::install::{InstallStatus, install_version};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -20,10 +20,7 @@ async fn main() -> anyhow::Result<()> {
             println!("INSTALL OK");
             let count = walkdir_count(&game_dir);
             println!("files: {count}");
-            let jar = game_dir
-                .join("versions")
-                .join("a1.0.4")
-                .join("a1.0.4.jar");
+            let jar = game_dir.join("versions").join("a1.0.4").join("a1.0.4.jar");
             println!("jar exists: {}", jar.exists());
         }
         Err(e) => {

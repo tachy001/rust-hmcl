@@ -22,8 +22,7 @@ fn resolve_file(locale: &str) -> Option<String> {
     let normalized = locale.replace('-', "_");
     let candidates: Vec<String> = if normalized.contains('_') {
         let (lang, region) = normalized.split_once('_').unwrap();
-        
-        
+
         vec![
             format!("I18N_{lang}_{region}.properties"),
             format!("I18N_{lang}.properties"),
@@ -35,7 +34,9 @@ fn resolve_file(locale: &str) -> Option<String> {
             "I18N.properties".to_owned(),
         ]
     };
-    candidates.into_iter().find(|name| lang_dir().join(name).exists())
+    candidates
+        .into_iter()
+        .find(|name| lang_dir().join(name).exists())
 }
 
 /// The directory containing the language pack files.
@@ -148,7 +149,10 @@ empty=
 
     #[test]
     fn test_resolve_file() {
-        assert_eq!(resolve_file("zh_CN"), Some("I18N_zh_CN.properties".to_owned()));
+        assert_eq!(
+            resolve_file("zh_CN"),
+            Some("I18N_zh_CN.properties".to_owned())
+        );
         assert_eq!(resolve_file("zh-TW"), Some("I18N_zh.properties".to_owned()));
         assert_eq!(resolve_file("fr"), Some("I18N.properties".to_owned()));
     }

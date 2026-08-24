@@ -126,7 +126,11 @@ pub struct CompatibilityRule {
 impl CompatibilityRule {
     /// Whether this rule allows the current platform.
     pub fn allows(&self, os: &OperatingSystem) -> bool {
-        let os_allowed = self.os.as_ref().map(|restriction| restriction.allows(os)).unwrap_or(true);
+        let os_allowed = self
+            .os
+            .as_ref()
+            .map(|restriction| restriction.allows(os))
+            .unwrap_or(true);
         let features_allowed = true; // feature flags (e.g. custom_resolution) are client-driven
         let allowed = os_allowed && features_allowed;
         match self.action.as_deref() {
@@ -147,8 +151,7 @@ mod tests {
 
     #[test]
     fn test_os_restriction() {
-        let restriction: OSRestriction =
-            serde_json::from_str(r#"{"name": "windows"}"#).unwrap();
+        let restriction: OSRestriction = serde_json::from_str(r#"{"name": "windows"}"#).unwrap();
         assert!(restriction.allows(&OperatingSystem::Windows));
         assert!(!restriction.allows(&OperatingSystem::Linux));
     }

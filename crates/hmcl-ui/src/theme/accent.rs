@@ -3,8 +3,7 @@
 use egui::Color32;
 
 /// A named or custom accent color.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AccentColor {
     #[default]
     Blue,
@@ -62,7 +61,6 @@ impl AccentColor {
         }
     }
 }
-
 
 /// The six standard accent colors, same as `ThemeColor.STANDARD_COLORS`.
 pub const STANDARD_COLORS: &[AccentColor] = &[

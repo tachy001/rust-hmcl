@@ -101,7 +101,12 @@ mod tests {
         let game_osx = arguments.game_args_for(&OperatingSystem::Osx);
         assert_eq!(
             game_osx,
-            vec!["--username", "${auth_player_name}", "--osx-only", "--not-windows"]
+            vec![
+                "--username",
+                "${auth_player_name}",
+                "--osx-only",
+                "--not-windows"
+            ]
         );
         let jvm = arguments.jvm_args_for(&OperatingSystem::Windows);
         assert_eq!(jvm, vec!["-Djava.library.path=${natives_directory}"]);
@@ -109,9 +114,8 @@ mod tests {
 
     #[test]
     fn test_string_argument_tokens() {
-        let legacy = StringArgument(
-            "--username ${auth_player_name} --version ${version_name}".to_owned(),
-        );
+        let legacy =
+            StringArgument("--username ${auth_player_name} --version ${version_name}".to_owned());
         assert_eq!(legacy.tokens().len(), 4);
     }
 }
