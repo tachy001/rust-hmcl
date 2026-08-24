@@ -4,12 +4,21 @@
 //! widgets, frame, views, theme, i18n, image and skin3d.
 
 pub mod app;
+pub mod async_runtime;
 pub mod i18n;
 pub mod image;
 pub mod theme;
+pub mod views;
 pub mod widgets;
 
 use std::path::PathBuf;
+
+/// The launcher data directory (config, accounts, logs).
+pub fn data_dir() -> PathBuf {
+    std::env::var_os("HMCL_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".hmcl-rs"))
+}
 
 /// The directory containing bundled assets (images, language packs, themes).
 ///

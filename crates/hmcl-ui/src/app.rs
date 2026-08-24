@@ -5,8 +5,12 @@
 
 use egui::{Color32, Context, Frame, Pos2, Rect, RichText, Ui, Vec2};
 
+use hmcl_core::auth::AccountStorage;
+
 use crate::theme::{self, AccentColor, Appearance};
+use crate::views;
 use crate::widgets::icon;
+use crate::widgets::toast::Toasts;
 
 /// Sidebar navigation entries, mirroring `RootPage`'s sidebar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -46,6 +50,10 @@ pub struct HmclApp {
     pub appearance: Appearance,
     pub accent: AccentColor,
     pub nav: NavPage,
+    pub toasts: Toasts,
+    pub accounts: AccountStorage,
+    account_page: views::account::AccountPage,
+    download_page: views::install::DownloadPage,
 }
 
 impl HmclApp {
@@ -54,15 +62,31 @@ impl HmclApp {
         let appearance = detect_appearance(&cc.egui_ctx);
         let accent = AccentColor::Blue;
         cc.egui_ctx.set_style(theme_style(appearance, accent));
+        theme::set_state(theme::ThemeState { appearance, accent });
+
+        let accounts = AccountStorage::load(&crate::data_dir().join("accounts.json"))
+            .unwrap_or_else(|e| {
+                tracing::warn!("failed to load accounts: {e}");
+                AccountStorage::default()
+            });
+
         Self {
             appearance,
             accent,
             nav: NavPage::Account,
+            toasts: Toasts::default(),
+            accounts,
+            account_page: views::account::AccountPage::default(),
+            download_page: views::install::DownloadPage::default(),
         }
     }
 
-    fn apply_theme(&mut self, ctx: &Context) {
+    pub fn apply_theme(&mut self, ctx: &Context) {
         ctx.set_style(theme_style(self.appearance, self.accent));
+        theme::set_state(theme::ThemeState {
+            appearance: self.appearance,
+            accent: self.accent,
+        });
     }
 }
 
@@ -117,13 +141,14 @@ impl eframe::App for HmclApp {
         self.apply_theme(ctx);
         title_bar(ctx, self);
         sidebar(ctx, self);
-        central_panel(ctx, self);
+        self.central_panel(ctx);
+        self.toasts.show(ctx);
     }
 }
 
 /// The custom window title bar (port of `MainWindowPane`).
-fn title_bar(ctx: &Context, app: &HmclApp) {
-    let palette = theme::MonetPalette::resolve(app.appearance, app.accent);
+fn title_bar(ctx: &Context, _app: &HmclApp) {
+    let palette = theme::palette();
     let height = 36.0;
     egui::TopBottomPanel::top("title_bar")
         .exact_height(height)
@@ -187,27 +212,27 @@ fn window_button(ui: &mut Ui, icon_name: &str, palette: theme::MonetPalette, act
 
 /// The categorized left sidebar (port of `RootPage`'s `AdvancedListBox`).
 fn sidebar(ctx: &Context, app: &mut HmclApp) {
-    let palette = theme::MonetPalette::resolve(app.appearance, app.accent);
+    let palette = theme::palette();
     egui::SidePanel::left("sidebar")
         .exact_width(200.0)
         .frame(Frame::NONE.fill(palette.surface_container_low))
         .show(ctx, |ui| {
             ui.add_space(10.0);
             nav_category(ui, "account");
-            nav_item(ui, app, NavPage::Account, true);
+            nav_item(ui, app, NavPage::Account);
             ui.add_space(14.0);
             nav_category(ui, "instance");
-            nav_item(ui, app, NavPage::Game, true);
-            nav_item(ui, app, NavPage::Instances, false);
-            nav_item(ui, app, NavPage::Download, false);
+            nav_item(ui, app, NavPage::Game);
+            nav_item(ui, app, NavPage::Instances);
+            nav_item(ui, app, NavPage::Download);
             ui.add_space(14.0);
             nav_category(ui, "settings.launcher.general");
-            nav_item(ui, app, NavPage::Settings, false);
+            nav_item(ui, app, NavPage::Settings);
         });
 }
 
 fn nav_category(ui: &mut Ui, key: &str) {
-    let palette = theme::MonetPalette::resolve(Appearance::Light, AccentColor::Blue);
+    let palette = theme::palette();
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         ui.add_space(16.0);
@@ -219,8 +244,8 @@ fn nav_category(ui: &mut Ui, key: &str) {
     });
 }
 
-fn nav_item(ui: &mut Ui, app: &mut HmclApp, page: NavPage, highlight: bool) {
-    let palette = theme::MonetPalette::resolve(app.appearance, app.accent);
+fn nav_item(ui: &mut Ui, app: &mut HmclApp, page: NavPage) {
+    let palette = theme::palette();
     let selected = app.nav == page;
     let (rect, response) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 36.0), egui::Sense::click());
 
@@ -251,28 +276,25 @@ fn nav_item(ui: &mut Ui, app: &mut HmclApp, page: NavPage, highlight: bool) {
         text_color,
     );
 
-    let _ = highlight;
     if response.clicked() {
         app.nav = page;
     }
 }
 
-/// The central page area. Currently a placeholder for the ported pages.
-fn central_panel(ctx: &Context, app: &HmclApp) {
-    let palette = theme::MonetPalette::resolve(app.appearance, app.accent);
-    egui::CentralPanel::default()
-        .frame(Frame::NONE.fill(palette.surface))
-        .show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space(ui.available_height() / 2.0 - 40.0);
-                let _ = icon(ui, app.nav.icon_name(), 64.0, palette.primary);
-                ui.add_space(12.0);
-                ui.label(
-                    RichText::new(crate::i18n::tr(app.nav.label_key()))
-                        .color(palette.on_surface_variant)
-                        .size(16.0),
-                );
-            });
-        });
+impl HmclApp {
+    /// The central page area, dispatching by the active navigation page.
+    fn central_panel(&mut self, ctx: &Context) {
+        match self.nav {
+            NavPage::Account => {
+                self.account_page
+                    .show(ctx, &mut self.accounts, &mut self.toasts);
+            }
+            NavPage::Download => {
+                self.download_page.show(ctx, &mut self.toasts);
+            }
+            NavPage::Instances => views::instance::show(ctx),
+            NavPage::Game => views::instance::show_game(ctx, &self.accounts),
+            NavPage::Settings => views::instance::show_settings(ctx, self),
+        }
+    }
 }
-

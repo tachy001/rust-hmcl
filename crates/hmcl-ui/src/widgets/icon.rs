@@ -404,8 +404,11 @@ fn flatten_arc(
     }
 }
 
-fn parsed_icons() -> &'static Mutex<HashMap<&'static str, Vec<Vec<Pos2>>>> {
-    static CACHE: OnceLock<Mutex<HashMap<&'static str, Vec<Vec<Pos2>>>>> = OnceLock::new();
+/// Cache mapping icon names to their parsed subpaths.
+type IconCache = Mutex<HashMap<&'static str, Vec<Vec<Pos2>>>>;
+
+fn parsed_icons() -> &'static IconCache {
+    static CACHE: OnceLock<IconCache> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 

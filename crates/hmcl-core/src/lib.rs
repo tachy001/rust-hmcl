@@ -4,6 +4,8 @@
 //! HMCL's `HMCLCore` Java module: auth, game, launch, download, modpack,
 //! java, task, event and util.
 
+pub mod auth;
+pub mod download;
 pub mod event;
 pub mod task;
 pub mod util;

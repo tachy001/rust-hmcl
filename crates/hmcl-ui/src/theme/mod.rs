@@ -27,6 +27,43 @@ impl Appearance {
     }
 }
 
+/// Global theme state (single-window application).
+#[derive(Debug, Clone, Copy)]
+pub struct ThemeState {
+    pub appearance: Appearance,
+    pub accent: AccentColor,
+}
+
+impl Default for ThemeState {
+    fn default() -> Self {
+        Self {
+            appearance: Appearance::Light,
+            accent: AccentColor::Blue,
+        }
+    }
+}
+
+static STATE: std::sync::RwLock<ThemeState> = std::sync::RwLock::new(ThemeState {
+    appearance: Appearance::Light,
+    accent: AccentColor::Blue,
+});
+
+/// Update the global theme state.
+pub fn set_state(state: ThemeState) {
+    *STATE.write().unwrap() = state;
+}
+
+/// The current global theme state.
+pub fn state() -> ThemeState {
+    *STATE.read().unwrap()
+}
+
+/// The Monet palette for the current global theme.
+pub fn palette() -> MonetPalette {
+    let state = state();
+    MonetPalette::resolve(state.appearance, state.accent)
+}
+
 /// Build egui `Visuals` for the given appearance and accent color.
 pub fn visuals(appearance: Appearance, accent: AccentColor) -> egui::Visuals {
     let palette = MonetPalette::resolve(appearance, accent);

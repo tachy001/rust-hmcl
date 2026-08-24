@@ -16,3 +16,4 @@ tokio.workspace = true
 reqwest.workspace = true
 zip.workspace = true
 sha1 = "0.10"
+md5 = "0.7"

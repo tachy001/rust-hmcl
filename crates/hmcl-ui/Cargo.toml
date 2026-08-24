@@ -20,3 +20,6 @@ oxideav-png.workspace = true
 hmcl-core.workspace = true
 sys-locale.workspace = true
 dark-light.workspace = true
+tokio.workspace = true
+webbrowser.workspace = true
+dirs.workspace = true
