@@ -1,4 +1,4 @@
-//! Rounded text fields, a port of HMCL's `jfx-text-field` style.
+﻿//! Rounded text fields, a port of HMCL's `jfx-text-field` style.
 
 use egui::{CornerRadius, Response, Sense, Ui, Vec2};
 
@@ -13,7 +13,7 @@ pub fn rounded_text_edit_singleline(
 ) -> Response {
     let palette = theme::palette();
     let height = 36.0;
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width.max(40.0), height), Sense::hover());
     ui.painter()
         .rect_filled(rect, CornerRadius::same(8), palette.surface_container_high);
     ui.painter().rect_stroke(
@@ -46,7 +46,7 @@ pub fn rounded_text_edit_multiline(
     height: f32,
 ) -> Response {
     let palette = theme::palette();
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width.max(40.0), height), Sense::hover());
     ui.painter()
         .rect_filled(rect, CornerRadius::same(8), palette.surface_container_high);
     ui.painter().rect_stroke(

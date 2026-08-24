@@ -19,7 +19,7 @@ pub fn two_line_list_item(
     let palette = theme::palette();
     let height = 56.0;
     let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width(), height),
+        Vec2::new(ui.available_width().max(40.0), height),
         if clickable {
             Sense::click()
         } else {
@@ -101,8 +101,10 @@ pub fn two_line_list_item(
 pub fn list_item(ui: &mut Ui, id: egui::Id, icon_name: Option<&str>, title: &str) -> Response {
     let palette = theme::palette();
     let height = 44.0;
-    let (rect, response) =
-        ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(
+        Vec2::new(ui.available_width().max(40.0), height),
+        Sense::click(),
+    );
     let bg = if response.hovered() {
         palette.surface_container_high
     } else {

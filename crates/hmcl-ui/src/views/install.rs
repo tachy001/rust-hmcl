@@ -1,4 +1,4 @@
-//! The download/version list page.
+﻿//! The download/version list page.
 //!
 //! Port of HMCL's `ui.download.DownloadPage`: fetches the Mojang version
 //! manifest and lists installable versions.
@@ -77,12 +77,12 @@ impl DownloadPage {
 
                             ui.add_space(8.0);
                             ui.horizontal(|ui| {
-                                crate::widgets::rounded_text_edit_singleline(
-                                    ui,
-                                    &mut self.search,
-                                    &crate::i18n::tr("search"),
-                                    (ui.available_width() - 8.0).min(340.0),
-                                );
+                            crate::widgets::rounded_text_edit_singleline(
+                                ui,
+                                &mut self.search,
+                                &crate::i18n::tr("search"),
+                                (ui.available_width() - 8.0).clamp(80.0, 340.0),
+                            );
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
@@ -139,6 +139,7 @@ impl DownloadPage {
                 egui::Id::new("install_progress"),
                 crate::i18n::tr("install.new_game"),
             )
+            .height(210.0)
             .positive_text(None)
             .show(ctx, |ui| {
                 ui.set_width(360.0);

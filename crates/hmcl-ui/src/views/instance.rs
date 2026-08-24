@@ -146,14 +146,14 @@ pub fn show_game(ctx: &Context, accounts: &AccountStorage) {
                         ui.horizontal(|ui| {
                             if let Some(logo) = crate::image::texture(ctx, "img/icon-title.png") {
                                 let size = logo.size_vec2();
-                                let scale = 24.0 / size.y;
+                                let scale = 24.0 / size.y.max(1.0);
                                 let rect = egui::Rect::from_min_size(ui.cursor().min, size * scale);
                                 ui.painter().image(
                                     logo.id(),
                                     rect,
                                     egui::Rect::from_min_max(
-                                        egui::Pos2::new(1.0, 1.0),
                                         egui::Pos2::ZERO,
+                                        egui::Pos2::new(1.0, 1.0),
                                     ),
                                     egui::Color32::WHITE,
                                 );

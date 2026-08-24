@@ -226,7 +226,7 @@ fn title_bar(ctx: &Context, _app: &HmclApp) {
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 // Drag region covering the whole bar minus the buttons.
-                let buttons_width = 3.0 * 40.0;
+                let buttons_width = 4.0 * 40.0;
                 let drag_rect = Rect::from_min_max(
                     ui.max_rect().min,
                     Pos2::new(ui.max_rect().max.x - buttons_width, ui.max_rect().max.y),
@@ -243,7 +243,19 @@ fn title_bar(ctx: &Context, _app: &HmclApp) {
                 }
 
                 ui.add_space(10.0);
-                let _ = icon(ui, "FORT", 20.0, palette.primary);
+                // The HMCL launcher icon.
+                if let Some(icon_texture) = crate::image::texture(ctx, "img/icon.png") {
+                    let size = icon_texture.size_vec2();
+                    let scale = 24.0 / size.y.max(1.0);
+                    let rect = Rect::from_min_size(ui.cursor().min, size * scale);
+                    ui.painter().image(
+                        icon_texture.id(),
+                        rect,
+                        egui::Rect::from_min_max(egui::Pos2::ZERO, egui::Pos2::new(1.0, 1.0)),
+                        egui::Color32::WHITE,
+                    );
+                    ui.advance_cursor_after_rect(rect);
+                }
                 ui.add_space(6.0);
                 ui.label(
                     RichText::new(crate::i18n::tr("launcher"))
@@ -255,11 +267,16 @@ fn title_bar(ctx: &Context, _app: &HmclApp) {
                     window_button(ui, "CLOSE", palette, |ctx| {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     });
+                    let maximized = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
+                    let icon_name = if maximized { "CHECKROOM" } else { "OUTPUT" };
+                    window_button(ui, icon_name, palette, |ctx| {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized));
+                    });
                     window_button(ui, "MINIMIZE_CENTER", palette, |ctx| {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
                     });
-                    window_button(ui, "HELP", palette, |_ctx| {
-                        let _ = webbrowser::open("https://hmcl.huangyuhui.net/");
+                    window_button(ui, "GITHUB", palette, |_ctx| {
+                        let _ = webbrowser::open("https://github.com/tachy001/rust-hmcl");
                     });
                 });
             });
@@ -279,7 +296,7 @@ fn window_button(
         Color32::TRANSPARENT
     };
     ui.painter().rect_filled(rect, 0.0, color);
-    let _ = icon(ui, icon_name, 18.0, palette.on_surface_variant);
+    icon::icon_in_rect(ui.painter(), rect, icon_name, palette.on_surface_variant);
     if response.clicked() {
         action(ui.ctx());
     }

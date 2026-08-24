@@ -173,6 +173,7 @@ impl AccountPage {
             LoginDialog::MethodSelect => {
                 let mut next: Option<LoginDialog> = None;
                 let result = Dialog::new(Id::new("login_method"), crate::i18n::tr("account.login"))
+                    .height(240.0)
                     .positive_text(None)
                     .show(ctx, |ui| {
                         ui.add_space(4.0);
@@ -217,7 +218,7 @@ impl AccountPage {
                         ui,
                         &mut name,
                         "",
-                        ui.available_width(),
+                        ui.available_width().max(40.0),
                     );
                     if let Some(message) = &error {
                         hint(ui, ToastKind::Error, message);
@@ -257,6 +258,7 @@ impl AccountPage {
                     Id::new("login_microsoft"),
                     crate::i18n::tr("account.methods.microsoft"),
                 )
+                .height(360.0)
                 .positive_text(None)
                 .show(ctx, |ui| match &mut *state {
                     MsLoginState::Requesting(task) => {
@@ -370,8 +372,10 @@ fn page_header(ui: &mut Ui, title_key: &str) {
 /// A large method-selection button for the login dialog.
 fn method_button(ui: &mut Ui, icon_name: &str, label: &str) -> bool {
     let palette = theme::palette();
-    let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 52.0), egui::Sense::click());
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width().max(40.0), 52.0),
+        egui::Sense::click(),
+    );
     let bg = if response.hovered() {
         palette.surface_container_highest
     } else {
