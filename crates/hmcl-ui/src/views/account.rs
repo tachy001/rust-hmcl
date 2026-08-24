@@ -64,10 +64,11 @@ impl AccountPage {
                                         .color(palette.on_surface_variant),
                                 );
                                 ui.add_space(8.0);
-                                if primary_button(
+                                if crate::widgets::filled_button(
                                     ui,
-                                    "ADD",
+                                    ui.id().with("add_account"),
                                     &crate::i18n::tr("account.missing.add"),
+                                    Some("ADD"),
                                 )
                                 .clicked()
                                 {
@@ -204,7 +205,12 @@ impl AccountPage {
                     .show(ctx, |ui| {
                         ui.add_space(4.0);
                         ui.label(crate::i18n::tr("account.username"));
-                        ui.text_edit_singleline(&mut name);
+                        crate::widgets::rounded_text_edit_singleline(
+                            ui,
+                            &mut name,
+                            "",
+                            ui.available_width(),
+                        );
                         if let Some(message) = &error {
                             hint(ui, ToastKind::Error, message);
                         }
@@ -359,45 +365,6 @@ fn page_header(ui: &mut Ui, title_key: &str) {
     });
 }
 
-/// A Material contained (primary) button with an icon and label.
-pub fn primary_button(ui: &mut Ui, icon_name: &str, label: &str) -> egui::Response {
-    let palette = theme::palette();
-    let text_width = ui.fonts(|f| {
-        f.layout_no_wrap(label.to_owned(), egui::FontId::proportional(14.0), palette.on_primary)
-            .size()
-            .x
-    });
-    let (rect, response) = ui.allocate_exact_size(
-        egui::vec2(text_width + 56.0, 40.0),
-        egui::Sense::click(),
-    );
-    let bg = if response.hovered() {
-        palette.primary_container
-    } else {
-        palette.primary
-    };
-    let fg = if response.hovered() {
-        palette.on_primary_container
-    } else {
-        palette.on_primary
-    };
-    ui.painter()
-        .rect_filled(rect, egui::CornerRadius::same(20), bg);
-    let icon_rect = Rect::from_min_size(
-        Pos2::new(rect.min.x + 16.0, rect.center().y - 10.0),
-        egui::vec2(20.0, 20.0),
-    );
-    crate::widgets::icon::icon_in_rect(ui.painter(), icon_rect, icon_name, fg);
-    ui.painter().text(
-        Pos2::new(rect.min.x + 44.0, rect.center().y),
-        Align2::LEFT_CENTER,
-        label,
-        egui::FontId::proportional(14.0),
-        fg,
-    );
-    response
-}
-
 /// A large method-selection button for the login dialog.
 fn method_button(ui: &mut Ui, icon_name: &str, label: &str) -> bool {
     let palette = theme::palette();
@@ -489,5 +456,6 @@ pub fn save_accounts(accounts: &AccountStorage, toasts: &mut Toasts) {
         toasts.error(format!("{e}"));
     }
 }
+
 
 

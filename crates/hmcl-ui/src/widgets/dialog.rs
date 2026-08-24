@@ -127,13 +127,16 @@ impl Dialog {
                         ui.add_space(8.0);
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if let Some(text) = &self.negative_text
-                                && text_button(ui, text, false) {
-                                    result = Some(DialogResult::Cancel);
-                                }
+                                && crate::widgets::text_button(ui, self.id.with("neg"), text, false).clicked()
+                            {
+                                result = Some(DialogResult::Cancel);
+                            }
                             if let Some(text) = &self.positive_text
-                                && text_button(ui, text, true) && self.positive_enabled {
-                                    result = Some(DialogResult::Accept);
-                                }
+                                && crate::widgets::text_button(ui, self.id.with("pos"), text, true).clicked()
+                                && self.positive_enabled
+                            {
+                                result = Some(DialogResult::Accept);
+                            }
                         });
                         ui.add_space(8.0);
                     },
@@ -162,38 +165,6 @@ fn dialog_frame(ui: &mut Ui, palette: theme::MonetPalette) {
         egui::Stroke::new(1.0_f32, palette.outline_variant),
         egui::StrokeKind::Inside,
     );
-}
-
-/// A dialog button styled like a Material text/contained button.
-fn text_button(ui: &mut Ui, text: &str, primary: bool) -> bool {
-    let palette = theme::palette();
-    let text_width = ui.fonts(|f| {
-        f.layout_no_wrap(text.to_owned(), egui::FontId::proportional(14.0), palette.on_surface)
-            .size()
-            .x
-    });
-    let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(text_width + 32.0, 36.0),
-        egui::Sense::click(),
-    );
-    let fill = if primary {
-        palette.primary
-    } else if response.hovered() {
-        palette.surface_container_highest
-    } else {
-        Color32::TRANSPARENT
-    };
-    let fg = if primary { palette.on_primary } else { palette.primary };
-    ui.painter()
-        .rect_filled(rect, egui::CornerRadius::same(18), fill);
-    ui.painter().text(
-        rect.center(),
-        Align2::CENTER_CENTER,
-        text,
-        egui::FontId::proportional(14.0),
-        fg,
-    );
-    response.clicked()
 }
 
 /// Show a simple message dialog with an OK button.

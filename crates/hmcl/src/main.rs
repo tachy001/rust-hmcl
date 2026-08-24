@@ -11,7 +11,8 @@ fn main() -> anyhow::Result<()> {
             .with_inner_size([960.0, 640.0])
             .with_min_inner_size([800.0, 520.0])
             .with_decorations(false)
-            .with_transparent(false),
+            .with_transparent(false)
+            .with_icon(hmcl_ui::image::window_icon().unwrap_or_default()),
         ..Default::default()
     };
     eframe::run_native(

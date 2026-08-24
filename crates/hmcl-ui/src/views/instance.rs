@@ -48,7 +48,8 @@ pub fn show(ctx: &Context) {
         });
 }
 
-/// Render the launch page (game overview).
+/// Render the launch page (game overview), with the HMCL title logo
+/// (port of `MainPage`'s `titleNode`: `icon-title.png` rotated 180°).
 pub fn show_game(ctx: &Context, accounts: &AccountStorage) {
     let palette = theme::palette();
     egui::CentralPanel::default()
@@ -59,11 +60,32 @@ pub fn show_game(ctx: &Context, accounts: &AccountStorage) {
                 ui.add_space(24.0);
                 crate::widgets::card(ui, |ui| {
                     ui.set_width(560.0);
-                    ui.label(
-                        RichText::new(crate::i18n::tr("instance"))
-                            .size(20.0)
-                            .color(palette.on_surface),
-                    );
+                    ui.horizontal(|ui| {
+                        if let Some(logo) = crate::image::texture(ctx, "img/icon-title.png") {
+                            let size = logo.size_vec2();
+                            let scale = 24.0 / size.y;
+                            let rect = egui::Rect::from_min_size(
+                                ui.cursor().min,
+                                size * scale,
+                            );
+                            ui.painter().image(
+                                logo.id(),
+                                rect,
+                                egui::Rect::from_min_max(
+                                    egui::Pos2::new(1.0, 1.0),
+                                    egui::Pos2::ZERO,
+                                ),
+                                egui::Color32::WHITE,
+                            );
+                            ui.advance_cursor_after_rect(rect);
+                        }
+                        ui.add_space(8.0);
+                        ui.label(
+                            RichText::new(crate::i18n::tr("instance"))
+                                .size(20.0)
+                                .color(palette.on_surface),
+                        );
+                    });
                     ui.add_space(20.0);
                     ui.vertical_centered(|ui| {
                         ui.add_space(16.0);

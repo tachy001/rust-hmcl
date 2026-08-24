@@ -121,8 +121,8 @@ pub fn visuals(appearance: Appearance, accent: AccentColor) -> egui::Visuals {
     *hyperlink_color = palette.primary;
 
     visuals.panel_fill = palette.surface;
-    visuals.extreme_bg_color = palette.surface;
-    visuals.faint_bg_color = palette.surface_container;
+    visuals.extreme_bg_color = palette.on_surface_variant.gamma_multiply(0.45);
+    visuals.faint_bg_color = egui::Color32::TRANSPARENT;
     visuals.window_fill = palette.surface_container_high;
     visuals.window_stroke = egui::Stroke::new(1.0_f32, palette.outline_variant);
     visuals.slider_trailing_fill = false;
@@ -135,7 +135,9 @@ pub fn apply_style(style: &mut egui::Style, appearance: Appearance, accent: Acce
     style.spacing.item_spacing = egui::vec2(8.0, 6.0);
     style.spacing.button_padding = egui::vec2(12.0, 6.0);
     style.spacing.interact_size.y = 30.0;
-    style.spacing.scroll = egui::style::ScrollStyle::solid();
+    let mut scroll = egui::style::ScrollStyle::solid();
+    scroll.bar_width = 6.0;scroll.floating = false;
+    style.spacing.scroll = scroll;
 }
 
 #[cfg(test)]
@@ -158,5 +160,6 @@ mod tests {
         assert_eq!(palette.surface.to_hex(), "#121318ff");
     }
 }
+
 
 

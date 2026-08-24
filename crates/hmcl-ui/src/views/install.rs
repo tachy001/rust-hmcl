@@ -64,10 +64,11 @@ impl DownloadPage {
 
                         ui.add_space(8.0);
                         ui.horizontal(|ui| {
-                            ui.add_sized(
-                                egui::vec2((ui.available_width() - 8.0).min(340.0), 32.0),
-                                egui::TextEdit::singleline(&mut self.search)
-                                    .hint_text(crate::i18n::tr("search")),
+                            crate::widgets::rounded_text_edit_singleline(
+                                ui,
+                                &mut self.search,
+                                &crate::i18n::tr("search"),
+                                (ui.available_width() - 8.0).min(340.0),
                             );
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let labels = vec![
@@ -136,17 +137,36 @@ impl DownloadPage {
 
         egui::Grid::new(ui.id().with("version_grid"))
             .num_columns(3)
-            .spacing(egui::vec2(24.0, 4.0))
+            .spacing(egui::vec2(24.0, 2.0))
             .show(ui, |ui| {
                 ui.label(RichText::new(crate::i18n::tr("world.game_version")).color(palette.on_surface_variant));
                 ui.label(RichText::new(crate::i18n::tr("instance.game.release")).color(palette.on_surface_variant));
                 ui.end_row();
                 for version in show_versions {
-                    ui.label(
-                        RichText::new(&version.id)
-                            .size(15.0)
-                            .color(palette.on_surface),
-                    );
+                    // Row: grass icon + version id, type label, install icon.
+                    ui.horizontal(|ui| {
+                        if let Some(icon_texture) =
+                            crate::image::texture(ctx_of(ui), "img/grass.png")
+                        {
+                            let rect = egui::Rect::from_min_size(
+                                ui.cursor().min,
+                                egui::vec2(20.0, 20.0),
+                            );
+                            ui.painter().image(
+                                icon_texture.id(),
+                                rect,
+                                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::Pos2::new(1.0, 1.0)),
+                                egui::Color32::WHITE,
+                            );
+                            ui.advance_cursor_after_rect(rect);
+                        }
+                        ui.add_space(6.0);
+                        ui.label(
+                            RichText::new(&version.id)
+                                .size(15.0)
+                                .color(palette.on_surface),
+                        );
+                    });
                     let version_type = VersionType::of(&version.version_type);
                     let label = match version_type {
                         VersionType::Release => crate::i18n::tr("instance.game.release"),
@@ -154,9 +174,14 @@ impl DownloadPage {
                         _ => version.version_type.clone(),
                     };
                     ui.label(RichText::new(label).color(palette.on_surface_variant));
-                    if ui
-                        .small_button(crate::i18n::tr("button.install"))
-                        .clicked()
+                    if crate::widgets::icon_button(
+                        ui,
+                        ui.id().with(("install", &version.id)),
+                        "DOWNLOAD",
+                        30.0,
+                    )
+                    .on_hover_text(crate::i18n::tr("button.install"))
+                    .clicked()
                     {
                         toasts.info(crate::i18n::tr("install.new_game.installation"));
                     }
@@ -164,4 +189,9 @@ impl DownloadPage {
                 }
             });
     }
+}
+
+/// The egui context of a `Ui`, for texture lookups inside rows.
+fn ctx_of(ui: &egui::Ui) -> &egui::Context {
+    ui.ctx()
 }

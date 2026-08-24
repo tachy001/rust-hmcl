@@ -62,6 +62,18 @@ pub fn wallpaper(ctx: &Context, id: &str) -> Option<TextureHandle> {
     texture(ctx, &format!("img/wallpapers/{id}.jpg"))
 }
 
+/// The window icon (`img/icon.png`), converted to an egui icon.
+pub fn window_icon() -> Option<egui::IconData> {
+    let bytes = std::fs::read(crate::assets_dir().join("img/icon.png")).ok()?;
+    let image = image::load_from_memory(&bytes).ok()?.to_rgba8();
+    let (width, height) = image.dimensions();
+    Some(egui::IconData {
+        rgba: image.into_raw(),
+        width,
+        height,
+    })
+}
+
 /// A playing APNG animation, mirroring HMCL's `AnimationImage`.
 pub struct AnimatedImage {
     frames: Vec<AnimatedFrame>,
