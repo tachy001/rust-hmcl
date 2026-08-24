@@ -7,5 +7,6 @@
 pub mod auth;
 pub mod download;
 pub mod event;
+pub mod game;
 pub mod task;
 pub mod util;

@@ -56,6 +56,7 @@ pub struct HmclApp {
     pub config: LauncherConfig,
     account_page: views::account::AccountPage,
     download_page: views::install::DownloadPage,
+    instance_page: views::instance::InstancePage,
 }
 
 impl HmclApp {
@@ -91,6 +92,7 @@ impl HmclApp {
             config,
             account_page: views::account::AccountPage::default(),
             download_page: views::install::DownloadPage::default(),
+            instance_page: views::instance::InstancePage::default(),
         }
     }
 
@@ -364,7 +366,7 @@ impl HmclApp {
             NavPage::Download => {
                 self.download_page.show(ctx, &mut self.toasts);
             }
-            NavPage::Instances => views::instance::show(ctx),
+            NavPage::Instances => views::instance::show(ctx, &mut self.instance_page),
             NavPage::Game => views::instance::show_game(ctx, &self.accounts),
             NavPage::Settings => views::instance::show_settings(ctx, self),
         }

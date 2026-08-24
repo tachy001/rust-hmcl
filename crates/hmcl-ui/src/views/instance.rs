@@ -1,9 +1,11 @@
 //! The instance management, launch and settings pages.
 //!
-//! Ports of HMCL's `ui.instances.GameListPage` (placeholder), the launch
-//! view of `MainPage` and `main.SettingsPage` (appearance section).
+//! Ports of HMCL's `ui.instances.GameListPage`, the launch view of
+//! `MainPage` and `main.SettingsPage` (appearance section).
 
-use egui::{Context, RichText, Ui};
+use std::time::{Duration, Instant};
+
+use egui::{Context, RichText};
 
 use hmcl_core::auth::AccountStorage;
 
@@ -11,8 +13,68 @@ use crate::app::HmclApp;
 use crate::config::BUILTIN_WALLPAPERS;
 use crate::theme::{self, Appearance};
 
+/// One installed version entry.
+#[derive(Debug, Clone)]
+pub struct InstalledVersion {
+    pub id: String,
+    pub version_type: String,
+}
+
+/// Persistent state of the instance list page.
+#[derive(Default)]
+pub struct InstancePage {
+    versions: Vec<InstalledVersion>,
+    last_scan: Option<Instant>,
+}
+
+impl InstancePage {
+    /// Scan the versions directory (throttled to once per second).
+    fn scan(&mut self) {
+        let now = Instant::now();
+        if let Some(last) = self.last_scan
+            && now.duration_since(last) < Duration::from_secs(1) {
+                return;
+            }
+        self.last_scan = Some(now);
+
+        let versions_dir = hmcl_core::download::default_game_dir(&crate::data_dir())
+            .join("versions");
+        let mut versions = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&versions_dir) {
+            for entry in entries.flatten() {
+                let json_path = entry.path().join(format!("{}.json", entry.file_name().to_string_lossy()));
+                if !json_path.exists() {
+                    continue;
+                }
+                let Ok(text) = std::fs::read_to_string(&json_path) else {
+                    continue;
+                };
+                let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) else {
+                    continue;
+                };
+                let id = json
+                    .get("id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default()
+                    .to_owned();
+                let version_type = json
+                    .get("type")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("custom")
+                    .to_owned();
+                if !id.is_empty() {
+                    versions.push(InstalledVersion { id, version_type });
+                }
+            }
+        }
+        versions.sort_by(|a, b| a.id.cmp(&b.id));
+        self.versions = versions;
+    }
+}
+
 /// Render the instance list page.
-pub fn show(ctx: &Context) {
+pub fn show(ctx: &Context, page: &mut InstancePage) {
+    page.scan();
     let palette = theme::palette();
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE)
@@ -27,22 +89,42 @@ pub fn show(ctx: &Context) {
                             .size(20.0)
                             .color(palette.on_surface),
                     );
-                    ui.add_space(20.0);
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(20.0);
-                        ui.label(
-                            RichText::new(crate::i18n::tr("instance.empty"))
-                                .color(palette.on_surface_variant)
-                                .size(15.0),
-                        );
-                        ui.add_space(6.0);
-                        ui.label(
-                            RichText::new(crate::i18n::tr("instance.empty.add"))
-                                .color(palette.on_surface_variant)
-                                .size(13.0),
-                        );
-                        ui.add_space(24.0);
-                    });
+                    ui.add_space(12.0);
+                    if page.versions.is_empty() {
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(24.0);
+                            ui.label(
+                                RichText::new(crate::i18n::tr("instance.empty"))
+                                    .color(palette.on_surface_variant)
+                                    .size(15.0),
+                            );
+                            ui.add_space(6.0);
+                            ui.label(
+                                RichText::new(crate::i18n::tr("instance.empty.add"))
+                                    .color(palette.on_surface_variant)
+                                    .size(13.0),
+                            );
+                            ui.add_space(24.0);
+                        });
+                    } else {
+                        for version in &page.versions {
+                            let type_label = match version.version_type.as_str() {
+                                "release" => crate::i18n::tr("instance.game.release"),
+                                "snapshot" => crate::i18n::tr("instance.game.snapshot"),
+                                other => other.to_owned(),
+                            };
+                            crate::widgets::two_line_list_item(
+                                ui,
+                                ui.id().with(("version", &version.id)),
+                                Some("GRASS"),
+                                &version.id,
+                                &type_label,
+                                false,
+                                true,
+                            );
+                        }
+                        ui.add_space(8.0);
+                    }
                 });
             });
         });
@@ -64,10 +146,7 @@ pub fn show_game(ctx: &Context, accounts: &AccountStorage) {
                         if let Some(logo) = crate::image::texture(ctx, "img/icon-title.png") {
                             let size = logo.size_vec2();
                             let scale = 24.0 / size.y;
-                            let rect = egui::Rect::from_min_size(
-                                ui.cursor().min,
-                                size * scale,
-                            );
+                            let rect = egui::Rect::from_min_size(ui.cursor().min, size * scale);
                             ui.painter().image(
                                 logo.id(),
                                 rect,
@@ -215,7 +294,7 @@ pub fn show_settings(ctx: &Context, app: &mut HmclApp) {
 }
 
 /// A small wallpaper preview button.
-fn wallpaper_button(ui: &mut Ui, id: &str, label: &str, current: &str) -> bool {
+fn wallpaper_button(ui: &mut egui::Ui, id: &str, label: &str, current: &str) -> bool {
     let palette = theme::palette();
     let selected = current == id;
     let (rect, response) = ui.allocate_exact_size(egui::vec2(64.0, 48.0), egui::Sense::click());
@@ -249,7 +328,7 @@ fn wallpaper_button(ui: &mut Ui, id: &str, label: &str, current: &str) -> bool {
     response.clicked()
 }
 
-fn section_title(ui: &mut Ui, key: &str) {
+fn section_title(ui: &mut egui::Ui, key: &str) {
     let palette = theme::palette();
     ui.add_space(8.0);
     ui.label(
@@ -259,5 +338,3 @@ fn section_title(ui: &mut Ui, key: &str) {
     );
     ui.add_space(6.0);
 }
-
-

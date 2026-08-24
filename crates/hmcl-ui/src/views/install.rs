@@ -5,7 +5,9 @@
 
 use egui::{Context, RichText, Ui};
 
+use hmcl_core::download::install::InstallTask;
 use hmcl_core::download::version_list::{RemoteVersion, VersionManifest, VersionType};
+use hmcl_core::download::spawn_install;
 
 use crate::async_runtime::{spawn, AsyncTask};
 use crate::theme;
@@ -20,6 +22,7 @@ pub struct DownloadPage {
     search: String,
     tab: usize,
     initialized: bool,
+    install: Option<InstallTask>,
 }
 
 impl DownloadPage {
@@ -86,10 +89,13 @@ impl DownloadPage {
                         });
 
                         ui.add_space(8.0);
+                        let mut install_request: Option<RemoteVersion> = None;
                         egui::ScrollArea::vertical()
                             .max_height(ui.available_height())
                             .show(ui, |ui| match (&self.manifest, &self.error) {
-                                (Some(manifest), _) => self.version_list(ui, manifest, toasts),
+                                (Some(manifest), _) => {
+                                    install_request = self.version_list(ui, manifest);
+                                }
                                 (None, Some(error)) => {
                                     hint(ui, ToastKind::Error, &crate::i18n::tr("download.failed"));
                                     ui.label(error);
@@ -101,9 +107,58 @@ impl DownloadPage {
                                     });
                                 }
                             });
+                        if let Some(version) = install_request {
+                            let game_dir =
+                                hmcl_core::download::default_game_dir(&crate::data_dir());
+                            self.install = Some(spawn_install(version, game_dir));
+                        }
                     });
                 });
             });
+
+        // Install progress dialog.
+        if let Some(task) = self.install.take() {
+            let result = crate::widgets::Dialog::new(
+                egui::Id::new("install_progress"),
+                crate::i18n::tr("install.new_game"),
+            )
+            .positive_text(None)
+            .show(ctx, |ui| {
+                ui.set_width(360.0);
+                if let Some(status) = task.poll_status() {
+                    ui.label(status.message);
+                    ui.add_space(6.0);
+                    crate::widgets::progress_bar(ui, status.fraction, 8.0);
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(format!(
+                            "{:.1} MB / {:.1} MB",
+                            status.done_bytes as f64 / 1048576.0,
+                            status.total_bytes as f64 / 1048576.0
+                        ))
+                        .size(12.0)
+                        .color(theme::palette().on_surface_variant),
+                    );
+                } else {
+                    ui.horizontal(|ui| {
+                        crate::widgets::spinner(ui, 20.0);
+                        ui.label(crate::i18n::tr("install.new_game.installation"));
+                    });
+                }
+                ui.add_space(4.0);
+            });
+            if result.is_some() {
+                if let Some(outcome) = task.poll_result() {
+                    match outcome {
+                        Ok(()) => toasts.info(crate::i18n::tr("install.success")),
+                        Err(e) => toasts.error(e.to_string()),
+                    }
+                }
+            } else {
+                // Still open: re-arm.
+                self.install = Some(task);
+            }
+        }
     }
 
     fn refresh(&mut self) {
@@ -115,7 +170,9 @@ impl DownloadPage {
         }));
     }
 
-    fn version_list(&self, ui: &mut Ui, manifest: &VersionManifest, toasts: &mut Toasts) {
+    /// Render the version rows, returning the version to install when the
+    /// user clicks an install button.
+    fn version_list(&self, ui: &mut Ui, manifest: &VersionManifest) -> Option<RemoteVersion> {
         let palette = theme::palette();
         let search = self.search.trim().to_lowercase();
         let show_versions: Vec<&RemoteVersion> = manifest
@@ -135,6 +192,7 @@ impl DownloadPage {
             })
             .collect();
 
+        let mut install_request: Option<RemoteVersion> = None;
         egui::Grid::new(ui.id().with("version_grid"))
             .num_columns(3)
             .spacing(egui::vec2(24.0, 2.0))
@@ -183,11 +241,12 @@ impl DownloadPage {
                     .on_hover_text(crate::i18n::tr("button.install"))
                     .clicked()
                     {
-                        toasts.info(crate::i18n::tr("install.new_game.installation"));
+                        install_request = Some(version.clone());
                     }
                     ui.end_row();
                 }
             });
+        install_request
     }
 }
 
@@ -195,3 +254,4 @@ impl DownloadPage {
 fn ctx_of(ui: &egui::Ui) -> &egui::Context {
     ui.ctx()
 }
+

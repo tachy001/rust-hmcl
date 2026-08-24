@@ -17,3 +17,8 @@ reqwest.workspace = true
 zip.workspace = true
 sha1 = "0.10"
 md5 = "0.7"
+futures-util = "0.3"
+regex = "1"
+
+[target.'cfg(windows)'.dependencies]
+winver = "1"
