@@ -1,0 +1,20 @@
+[package]
+name = "hmcl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Hello Minecraft! Launcher rewritten in Rust"
+
+[dependencies]
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+dirs.workspace = true
+eframe.workspace = true
+egui.workspace = true
+hmcl-ui.workspace = true
+
+[[bin]]
+name = "hmcl"
+path = "src/main.rs"

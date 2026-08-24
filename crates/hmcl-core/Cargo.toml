@@ -1,0 +1,18 @@
+[package]
+name = "hmcl-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Core logic of the HMCL launcher rewritten in Rust"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+zip.workspace = true
+sha1 = "0.10"

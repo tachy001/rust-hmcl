@@ -1,0 +1,22 @@
+[package]
+name = "hmcl-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "egui-based user interface of the HMCL launcher rewritten in Rust"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+eframe.workspace = true
+egui.workspace = true
+egui_extras.workspace = true
+image.workspace = true
+oxideav-png.workspace = true
+hmcl-core.workspace = true
+sys-locale.workspace = true
+dark-light.workspace = true
