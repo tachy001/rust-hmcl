@@ -5,6 +5,7 @@
 
 pub mod app;
 pub mod async_runtime;
+pub mod config;
 pub mod i18n;
 pub mod image;
 pub mod theme;

@@ -14,5 +14,5 @@ pub use icon::{icon, icon_in_rect, icon_shapes, parse_path};
 pub use list_item::{list_item, two_line_list_item};
 pub use spinner::{progress_bar, spinner};
 pub use tab::tab_bar;
-pub use toast::{hint, hint_frame, ToastKind, Toasts};
+pub use toast::{card, hint, hint_frame, ToastKind, Toasts};
 pub use validator::{validate_all, NumberValidator, RequiredValidator, UrlValidator, Validator};

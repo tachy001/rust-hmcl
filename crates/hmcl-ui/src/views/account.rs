@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use egui::{Align2, Context, Id, RichText, Ui};
+use egui::{Align2, Context, Id, Pos2, Rect, RichText, Ui};
 
 use hmcl_core::auth::microsoft::{DeviceCodeResponse, DeviceTokenResponse, MicrosoftAuthenticator};
 use hmcl_core::auth::{offline_uuid, Account, AccountStorage};
@@ -47,68 +47,110 @@ impl AccountPage {
     pub fn show(&mut self, ctx: &Context, accounts: &mut AccountStorage, toasts: &mut Toasts) {
         let palette = theme::palette();
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(palette.surface))
+            .frame(egui::Frame::NONE)
             .show(ctx, |ui| {
-                page_header(ui, "account", "ADD", |_ui| {
-                    self.dialog = Some(LoginDialog::MethodSelect);
-                });
-                ui.add_space(8.0);
-                if accounts.accounts.is_empty() {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(60.0);
-                        ui.label(
-                            RichText::new(crate::i18n::tr("account.empty"))
-                                .color(palette.on_surface_variant),
-                        );
+                ui.add_space(20.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(24.0);
+                    crate::widgets::card(ui, |ui| {
+                        ui.set_width(480.0);
+                        page_header(ui, "account");
                         ui.add_space(8.0);
-                        if ui.button(crate::i18n::tr("account.missing.add")).clicked() {
-                            self.dialog = Some(LoginDialog::MethodSelect);
-                        }
-                    });
-                } else {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        let mut remove_index = None;
-                        let mut copied = false;
-                        for (index, account) in accounts.accounts.iter().enumerate() {
-                            let selected = accounts.selected.as_deref() == Some(account.uuid());
-                            let response = crate::widgets::two_line_list_item(
-                                ui,
-                                ui.id().with(("account", account.uuid())),
-                                Some("PERSON"),
-                                account.username(),
-                                &format!("UUID: {}", account.uuid_dashed()),
-                                selected,
-                                true,
-                            );
-                            if response.clicked() {
-                                accounts.selected = Some(account.uuid().to_owned());
-                            }
-                            response.context_menu(|ui| {
-                                if ui.button(crate::i18n::tr("account.copy_uuid")).clicked() {
-                                    ui.ctx().copy_text(account.uuid_dashed());
-                                    copied = true;
-                                    ui.close();
+                        if accounts.accounts.is_empty() {
+                            ui.vertical_centered(|ui| {
+                                ui.add_space(32.0);
+                                ui.label(
+                                    RichText::new(crate::i18n::tr("account.empty"))
+                                        .color(palette.on_surface_variant),
+                                );
+                                ui.add_space(8.0);
+                                if primary_button(
+                                    ui,
+                                    "ADD",
+                                    &crate::i18n::tr("account.missing.add"),
+                                )
+                                .clicked()
+                                {
+                                    self.dialog = Some(LoginDialog::MethodSelect);
                                 }
-                                if ui.button(crate::i18n::tr("button.remove")).clicked() {
-                                    remove_index = Some(index);
-                                    ui.close();
-                                }
+                                ui.add_space(24.0);
                             });
-                        }
-                        if copied {
-                            toasts.info(crate::i18n::tr("message.copied"));
-                        }
-                        if let Some(index) = remove_index {
-                            let account = accounts.accounts[index].clone();
-                            accounts.accounts.remove(index);
-                            if accounts.selected.as_deref() == Some(account.uuid()) {
-                                accounts.selected = None;
+                        } else {
+                            let mut remove_index = None;
+                            let mut copied = false;
+                            for (index, account) in accounts.accounts.iter().enumerate() {
+                                let selected = accounts.selected.as_deref() == Some(account.uuid());
+                                let response = crate::widgets::two_line_list_item(
+                                    ui,
+                                    ui.id().with(("account", account.uuid())),
+                                    Some("PERSON"),
+                                    account.username(),
+                                    &format!("UUID: {}", account.uuid_dashed()),
+                                    selected,
+                                    true,
+                                );
+                                if response.clicked() {
+                                    accounts.selected = Some(account.uuid().to_owned());
+                                }
+                                response.context_menu(|ui| {
+                                    if ui.button(crate::i18n::tr("account.copy_uuid")).clicked() {
+                                        ui.ctx().copy_text(account.uuid_dashed());
+                                        copied = true;
+                                        ui.close();
+                                    }
+                                    if ui.button(crate::i18n::tr("button.remove")).clicked() {
+                                        remove_index = Some(index);
+                                        ui.close();
+                                    }
+                                });
                             }
-                            if let Err(e) = accounts.save(&crate::data_dir().join("accounts.json")) {
-                                toasts.error(format!("{e}"));
+                            if copied {
+                                toasts.info(crate::i18n::tr("message.copied"));
                             }
+                            if let Some(index) = remove_index {
+                                let account = accounts.accounts[index].clone();
+                                accounts.accounts.remove(index);
+                                if accounts.selected.as_deref() == Some(account.uuid()) {
+                                    accounts.selected = None;
+                                }
+                                if let Err(e) = accounts.save(&crate::data_dir().join("accounts.json")) {
+                                    toasts.error(format!("{e}"));
+                                }
+                            }
+                            ui.add_space(8.0);
                         }
                     });
+                });
+
+                // Floating action button, bottom-right.
+                if !accounts.accounts.is_empty() {
+                    let fab_size = 56.0;
+                    let fab_rect = Rect::from_min_size(
+                        Pos2::new(
+                            ui.max_rect().max.x - fab_size - 28.0,
+                            ui.max_rect().max.y - fab_size - 28.0,
+                        ),
+                        egui::vec2(fab_size, fab_size),
+                    );
+                    let response = ui.interact(fab_rect, ui.id().with("fab_add"), egui::Sense::click());
+                    ui.painter().circle_filled(
+                        fab_rect.center(),
+                        fab_size / 2.0,
+                        if response.hovered() {
+                            palette.primary_container
+                        } else {
+                            palette.primary
+                        },
+                    );
+                    crate::widgets::icon::icon_in_rect(
+                        ui.painter(),
+                        fab_rect,
+                        "ADD",
+                        palette.on_primary,
+                    );
+                    if response.clicked() {
+                        self.dialog = Some(LoginDialog::MethodSelect);
+                    }
                 }
             });
 
@@ -305,34 +347,55 @@ impl AccountPage {
     }
 }
 
-/// Render the header of a page with an optional action button.
-fn page_header(ui: &mut Ui, title_key: &str, action_icon: &str, mut on_action: impl FnMut(&mut Ui)) {
+/// Render the header of a page with a large title.
+fn page_header(ui: &mut Ui, title_key: &str) {
     let palette = theme::palette();
     ui.horizontal(|ui| {
-        ui.add_space(24.0);
         ui.label(
             RichText::new(crate::i18n::tr(title_key))
-                .size(22.0)
+                .size(20.0)
                 .color(palette.on_surface),
         );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add_space(16.0);
-            let (rect, response) =
-                ui.allocate_exact_size(egui::vec2(40.0, 40.0), egui::Sense::click());
-            let bg = if response.hovered() {
-                palette.primary_container
-            } else {
-                palette.surface_container_high
-            };
-            ui.painter()
-                .circle_filled(rect.center(), 19.0, bg);
-            crate::widgets::icon::icon_in_rect(ui.painter(), rect, action_icon, palette.primary);
-            if response.clicked() {
-                on_action(ui);
-            }
-        });
-        ui.add_space(24.0);
     });
+}
+
+/// A Material contained (primary) button with an icon and label.
+pub fn primary_button(ui: &mut Ui, icon_name: &str, label: &str) -> egui::Response {
+    let palette = theme::palette();
+    let text_width = ui.fonts(|f| {
+        f.layout_no_wrap(label.to_owned(), egui::FontId::proportional(14.0), palette.on_primary)
+            .size()
+            .x
+    });
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(text_width + 56.0, 40.0),
+        egui::Sense::click(),
+    );
+    let bg = if response.hovered() {
+        palette.primary_container
+    } else {
+        palette.primary
+    };
+    let fg = if response.hovered() {
+        palette.on_primary_container
+    } else {
+        palette.on_primary
+    };
+    ui.painter()
+        .rect_filled(rect, egui::CornerRadius::same(20), bg);
+    let icon_rect = Rect::from_min_size(
+        Pos2::new(rect.min.x + 16.0, rect.center().y - 10.0),
+        egui::vec2(20.0, 20.0),
+    );
+    crate::widgets::icon::icon_in_rect(ui.painter(), icon_rect, icon_name, fg);
+    ui.painter().text(
+        Pos2::new(rect.min.x + 44.0, rect.center().y),
+        Align2::LEFT_CENTER,
+        label,
+        egui::FontId::proportional(14.0),
+        fg,
+    );
+    response
 }
 
 /// A large method-selection button for the login dialog.
@@ -426,4 +489,5 @@ pub fn save_accounts(accounts: &AccountStorage, toasts: &mut Toasts) {
         toasts.error(format!("{e}"));
     }
 }
+
 

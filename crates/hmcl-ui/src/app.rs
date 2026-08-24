@@ -7,6 +7,7 @@ use egui::{Color32, Context, Frame, Pos2, Rect, RichText, Ui, Vec2};
 
 use hmcl_core::auth::AccountStorage;
 
+use crate::config::LauncherConfig;
 use crate::theme::{self, AccentColor, Appearance};
 use crate::views;
 use crate::widgets::icon;
@@ -52,6 +53,7 @@ pub struct HmclApp {
     pub nav: NavPage,
     pub toasts: Toasts,
     pub accounts: AccountStorage,
+    pub config: LauncherConfig,
     account_page: views::account::AccountPage,
     download_page: views::install::DownloadPage,
 }
@@ -59,8 +61,18 @@ pub struct HmclApp {
 impl HmclApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         setup_fonts(&cc.egui_ctx);
-        let appearance = detect_appearance(&cc.egui_ctx);
-        let accent = AccentColor::Blue;
+        let config_path = crate::data_dir().join("config.json");
+        let first_run = !config_path.exists();
+        let config = LauncherConfig::load(&config_path).unwrap_or_else(|e| {
+            tracing::warn!("failed to load config: {e}");
+            LauncherConfig::default()
+        });
+        let appearance = if first_run {
+            detect_appearance(&cc.egui_ctx)
+        } else {
+            config.appearance()
+        };
+        let accent = config.accent();
         cc.egui_ctx.set_style(theme_style(appearance, accent));
         theme::set_state(theme::ThemeState { appearance, accent });
 
@@ -76,6 +88,7 @@ impl HmclApp {
             nav: NavPage::Account,
             toasts: Toasts::default(),
             accounts,
+            config,
             account_page: views::account::AccountPage::default(),
             download_page: views::install::DownloadPage::default(),
         }
@@ -87,6 +100,20 @@ impl HmclApp {
             appearance: self.appearance,
             accent: self.accent,
         });
+        let _ = self.config.save(&crate::data_dir().join("config.json"));
+    }
+
+    /// Persist the current appearance settings.
+    pub(crate) fn save_config(&self) {
+        let mut config = self.config.clone();
+        config.appearance = match self.appearance {
+            Appearance::Dark => "dark".to_owned(),
+            Appearance::Light => "light".to_owned(),
+        };
+        config.accent = self.accent.name().to_owned();
+        if let Err(e) = config.save(&crate::data_dir().join("config.json")) {
+            tracing::warn!("failed to save config: {e}");
+        }
     }
 }
 
@@ -121,7 +148,7 @@ fn setup_fonts(ctx: &Context) {
     ctx.set_fonts(fonts);
 }
 
-/// Detect the initial light/dark preference (system dark mode, then egui).
+/// Detect the initial light/dark preference, used on first run.
 fn detect_appearance(ctx: &Context) -> Appearance {
     match dark_light::detect() {
         Ok(dark_light::Mode::Dark) => Appearance::Dark,
@@ -139,6 +166,7 @@ fn detect_appearance(ctx: &Context) -> Appearance {
 impl eframe::App for HmclApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         self.apply_theme(ctx);
+        paint_background(ctx, self);
         title_bar(ctx, self);
         sidebar(ctx, self);
         self.central_panel(ctx);
@@ -146,17 +174,57 @@ impl eframe::App for HmclApp {
     }
 }
 
-/// The custom window title bar (port of `MainWindowPane`).
+/// Paint the wallpaper layer behind all panels (port of
+/// `MainWindowPane`'s background node: bottom-center, contain-sized).
+fn paint_background(ctx: &Context, app: &HmclApp) {
+    let painter = ctx.layer_painter(egui::LayerId::background());
+    let screen = ctx.screen_rect();
+    let palette = theme::palette();
+
+    // Base fill under the wallpaper.
+    painter.rect_filled(screen, 0.0, palette.surface_container);
+
+    let opacity = app.config.background_opacity.clamp(0.0, 1.0);
+    if opacity >= 0.001 {
+        if let Some(texture) = crate::image::wallpaper(ctx, &app.config.wallpaper) {
+            let image_size = texture.size_vec2();
+            let scale = (screen.width() / image_size.x).min(screen.height() / image_size.y);
+            let size = image_size * scale;
+            let rect = Rect::from_min_size(
+                Pos2::new(screen.center().x - size.x / 2.0, screen.max.y - size.y),
+                size,
+            );
+            let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
+            painter.image(
+                texture.id(),
+                rect,
+                uv,
+                Color32::WHITE.gamma_multiply(opacity),
+            );
+        }
+        // Dark scrim so light text stays readable over bright wallpapers.
+        if app.appearance.is_dark() {
+            painter.rect_filled(
+                screen,
+                0.0,
+                Color32::from_black_alpha(64),
+            );
+        }
+    }
+}
+
+/// The custom window title bar (port of `MainWindowPane`'s jfx-decorator).
 fn title_bar(ctx: &Context, _app: &HmclApp) {
     let palette = theme::palette();
-    let height = 36.0;
+    let height = 40.0;
+    let fill = palette.surface_container_low.gamma_multiply(0.82);
     egui::TopBottomPanel::top("title_bar")
         .exact_height(height)
-        .frame(Frame::NONE.fill(palette.surface_container_low))
+        .frame(Frame::NONE.fill(fill))
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 // Drag region covering the whole bar minus the buttons.
-                let buttons_width = 3.0 * 44.0;
+                let buttons_width = 3.0 * 40.0;
                 let drag_rect = Rect::from_min_max(
                     ui.max_rect().min,
                     Pos2::new(ui.max_rect().max.x - buttons_width, ui.max_rect().max.y),
@@ -171,12 +239,13 @@ fn title_bar(ctx: &Context, _app: &HmclApp) {
                         .send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized));
                 }
 
-                let _ = icon(ui, "FORT", 18.0, palette.primary);
+                ui.add_space(10.0);
+                let _ = icon(ui, "FORT", 20.0, palette.primary);
                 ui.add_space(6.0);
                 ui.label(
                     RichText::new(crate::i18n::tr("launcher"))
                         .color(palette.on_surface)
-                        .size(13.0),
+                        .size(14.0),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_space(4.0);
@@ -186,10 +255,8 @@ fn title_bar(ctx: &Context, _app: &HmclApp) {
                     window_button(ui, "MINIMIZE_CENTER", palette, |ctx| {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
                     });
-                    let maximized = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
-                    let icon_name = if maximized { "CHECKROOM" } else { "OUTPUT" };
-                    window_button(ui, icon_name, palette, |ctx| {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized));
+                    window_button(ui, "HELP", palette, |_ctx| {
+                        let _ = webbrowser::open("https://hmcl.huangyuhui.net/");
                     });
                 });
             });
@@ -197,14 +264,14 @@ fn title_bar(ctx: &Context, _app: &HmclApp) {
 }
 
 fn window_button(ui: &mut Ui, icon_name: &str, palette: theme::MonetPalette, action: impl FnOnce(&Context)) {
-    let (rect, response) = ui.allocate_exact_size(Vec2::splat(44.0), egui::Sense::click());
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(40.0), egui::Sense::click());
     let color = if response.hovered() {
         palette.primary_container
     } else {
         Color32::TRANSPARENT
     };
     ui.painter().rect_filled(rect, 0.0, color);
-    let _ = icon(ui, icon_name, 16.0, palette.on_surface_variant);
+    let _ = icon(ui, icon_name, 18.0, palette.on_surface_variant);
     if response.clicked() {
         action(ui.ctx());
     }
@@ -213,9 +280,10 @@ fn window_button(ui: &mut Ui, icon_name: &str, palette: theme::MonetPalette, act
 /// The categorized left sidebar (port of `RootPage`'s `AdvancedListBox`).
 fn sidebar(ctx: &Context, app: &mut HmclApp) {
     let palette = theme::palette();
+    let fill = palette.surface_container_low.gamma_multiply(0.82);
     egui::SidePanel::left("sidebar")
         .exact_width(200.0)
-        .frame(Frame::NONE.fill(palette.surface_container_low))
+        .frame(Frame::NONE.fill(fill))
         .show(ctx, |ui| {
             ui.add_space(10.0);
             nav_category(ui, "account");
@@ -249,25 +317,29 @@ fn nav_item(ui: &mut Ui, app: &mut HmclApp, page: NavPage) {
     let selected = app.nav == page;
     let (rect, response) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 36.0), egui::Sense::click());
 
+    let item_rect = rect.shrink2(Vec2::new(10.0, 2.0));
     if selected {
-        let indicator = Rect::from_min_max(
-            Pos2::new(rect.min.x, rect.min.y),
-            Pos2::new(rect.min.x + 3.0, rect.max.y),
+        ui.painter().rect_filled(
+            item_rect,
+            egui::CornerRadius::same(8),
+            palette.primary_container,
         );
-        ui.painter().rect_filled(indicator, 0.0, palette.primary);
-        ui.painter().rect_filled(rect, 0.0, palette.primary_container);
     } else if response.hovered() {
-        ui.painter().rect_filled(rect, 0.0, palette.surface_container_high);
+        ui.painter().rect_filled(
+            item_rect,
+            egui::CornerRadius::same(8),
+            palette.surface_container_high.gamma_multiply(0.6),
+        );
     }
 
     let icon_color = if selected { palette.on_primary_container } else { palette.on_surface_variant };
     let text_color = if selected { palette.on_primary_container } else { palette.on_surface };
 
-    let icon_rect = Rect::from_min_size(rect.min + Vec2::new(16.0, 9.0), Vec2::splat(18.0));
+    let icon_rect = Rect::from_min_size(rect.min + Vec2::new(22.0, 8.0), Vec2::splat(20.0));
     ui.painter().extend(
-        crate::widgets::icon_shapes(page.icon_name(), icon_rect.min, 18.0, icon_color).unwrap_or_default(),
+        crate::widgets::icon_shapes(page.icon_name(), icon_rect.min, 20.0, icon_color).unwrap_or_default(),
     );
-    let text_pos = Pos2::new(rect.min.x + 44.0, rect.center().y);
+    let text_pos = Pos2::new(rect.min.x + 52.0, rect.center().y);
     ui.painter().text(
         text_pos,
         egui::Align2::LEFT_CENTER,
@@ -298,3 +370,4 @@ impl HmclApp {
         }
     }
 }
+

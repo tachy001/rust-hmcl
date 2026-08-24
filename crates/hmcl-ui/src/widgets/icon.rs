@@ -296,7 +296,7 @@ impl Parser {
     }
 }
 
-const CURVE_STEPS: usize = 12;
+const CURVE_STEPS: usize = 24;
 
 fn flatten_quadratic(from: Pos2, control: Pos2, to: Pos2, out: &mut Vec<Pos2>) {
     for i in 1..=CURVE_STEPS {
@@ -392,7 +392,7 @@ fn flatten_arc(
         delta_theta += std::f32::consts::TAU;
     }
 
-    let steps = ((delta_theta.abs() / (std::f32::consts::PI / 8.0)).ceil() as usize).max(1);
+    let steps = ((delta_theta.abs() / (std::f32::consts::PI / 16.0)).ceil() as usize).max(1);
     for i in 1..=steps {
         let theta = theta1 + delta_theta * i as f32 / steps as f32;
         let (sin_t, cos_t) = theta.sin_cos();
@@ -508,4 +508,5 @@ mod tests {
         }
     }
 }
+
 

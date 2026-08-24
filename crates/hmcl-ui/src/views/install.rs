@@ -42,61 +42,65 @@ impl DownloadPage {
             }
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(palette.surface))
+            .frame(egui::Frame::NONE)
             .show(ctx, |ui| {
-                ui.add_space(16.0);
+                ui.add_space(20.0);
                 ui.horizontal(|ui| {
                     ui.add_space(24.0);
-                    ui.label(
-                        RichText::new(crate::i18n::tr("download"))
-                            .size(22.0)
-                            .color(palette.on_surface),
-                    );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.add_space(16.0);
-                        if ui.button(crate::i18n::tr("button.refresh")).clicked() {
-                            self.refresh();
-                        }
-                    });
-                    ui.add_space(24.0);
-                });
-
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(24.0);
-                    ui.add_sized(
-                        egui::vec2((ui.available_width() - 24.0).min(360.0), 32.0),
-                        egui::TextEdit::singleline(&mut self.search)
-                            .hint_text(crate::i18n::tr("search")),
-                    );
-                    ui.add_space(8.0);
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.add_space(16.0);
-                        let labels = vec![
-                            crate::i18n::tr("instance.game.releases"),
-                            crate::i18n::tr("instance.game.snapshots"),
-                            crate::i18n::tr("instance.game.old"),
-                        ];
-                        let _ = crate::widgets::tab_bar(ui, ui.id().with("version_tabs"), &labels, &mut self.tab);
-                    });
-                });
-
-                ui.add_space(8.0);
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.horizontal(|ui| ui.add_space(24.0));
-                    match (&self.manifest, &self.error) {
-                        (Some(manifest), _) => self.version_list(ui, manifest, toasts),
-                        (None, Some(error)) => {
-                            hint(ui, ToastKind::Error, &crate::i18n::tr("download.failed"));
-                            ui.label(error);
-                        }
-                        _ => {
-                            ui.horizontal(|ui| {
-                                crate::widgets::spinner(ui, 20.0);
-                                ui.label(crate::i18n::tr("download.content"));
+                    crate::widgets::card(ui, |ui| {
+                        ui.set_width((ui.available_width() - 24.0).min(720.0));
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(crate::i18n::tr("download"))
+                                    .size(20.0)
+                                    .color(palette.on_surface),
+                            );
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui.button(crate::i18n::tr("button.refresh")).clicked() {
+                                    self.refresh();
+                                }
                             });
-                        }
-                    }
+                        });
+
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.add_sized(
+                                egui::vec2((ui.available_width() - 8.0).min(340.0), 32.0),
+                                egui::TextEdit::singleline(&mut self.search)
+                                    .hint_text(crate::i18n::tr("search")),
+                            );
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let labels = vec![
+                                    crate::i18n::tr("instance.game.releases"),
+                                    crate::i18n::tr("instance.game.snapshots"),
+                                    crate::i18n::tr("instance.game.old"),
+                                ];
+                                let _ = crate::widgets::tab_bar(
+                                    ui,
+                                    ui.id().with("version_tabs"),
+                                    &labels,
+                                    &mut self.tab,
+                                );
+                            });
+                        });
+
+                        ui.add_space(8.0);
+                        egui::ScrollArea::vertical()
+                            .max_height(ui.available_height())
+                            .show(ui, |ui| match (&self.manifest, &self.error) {
+                                (Some(manifest), _) => self.version_list(ui, manifest, toasts),
+                                (None, Some(error)) => {
+                                    hint(ui, ToastKind::Error, &crate::i18n::tr("download.failed"));
+                                    ui.label(error);
+                                }
+                                _ => {
+                                    ui.horizontal(|ui| {
+                                        crate::widgets::spinner(ui, 20.0);
+                                        ui.label(crate::i18n::tr("download.content"));
+                                    });
+                                }
+                            });
+                    });
                 });
             });
     }

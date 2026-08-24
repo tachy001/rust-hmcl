@@ -152,6 +152,21 @@ pub fn hint(ui: &mut egui::Ui, kind: ToastKind, text: &str) {
     });
 }
 
+/// A translucent rounded "card" container used by pages so the wallpaper
+/// shows through slightly (port of HMCL's layered surfaces).
+pub fn card<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> egui::InnerResponse<R> {
+    let palette = theme::palette();
+    egui::Frame::new()
+        .fill(palette.surface.gamma_multiply(0.86))
+        .stroke(egui::Stroke::new(
+            1.0_f32,
+            palette.outline_variant.gamma_multiply(0.5),
+        ))
+        .corner_radius(CornerRadius::same(10))
+        .inner_margin(egui::Margin::symmetric(16, 14))
+        .show(ui, add_contents)
+}
+
 /// Show a frame helper used by hint banners.
 pub fn hint_frame(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui)) {
     let palette = theme::palette();

@@ -54,6 +54,14 @@ pub fn texture(ctx: &Context, asset: &str) -> Option<TextureHandle> {
     Some(handle)
 }
 
+/// Load a built-in wallpaper by id (e.g. `2021-08-26`).
+pub fn wallpaper(ctx: &Context, id: &str) -> Option<TextureHandle> {
+    if id == "none" {
+        return None;
+    }
+    texture(ctx, &format!("img/wallpapers/{id}.jpg"))
+}
+
 /// A playing APNG animation, mirroring HMCL's `AnimationImage`.
 pub struct AnimatedImage {
     frames: Vec<AnimatedFrame>,
