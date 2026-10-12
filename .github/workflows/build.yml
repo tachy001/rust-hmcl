@@ -1,0 +1,33 @@
+name: Native launcher
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows-x64
+          - os: ubuntu-22.04
+            artifact: linux-x64
+          - os: macos-14
+            artifact: macos-arm64
+          - os: macos-15-intel
+            artifact: macos-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libgl1-mesa-dev
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-hmcl-${{ matrix.artifact }}
+          path: |
+            target/release/rust-hmcl
+            target/release/rust-hmcl.exe
+            LICENSE
+            README.md

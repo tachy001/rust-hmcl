@@ -1,0 +1,7 @@
+.tools/
+target/
+dist/
+*.part
+*.log
+.DS_Store
+Thumbs.db
