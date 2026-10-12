@@ -1,6 +1,18 @@
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VersionSettings {
+    pub memory: Option<u32>,
+    pub java: Option<String>,
+    pub extra_jvm: Option<String>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub isolated: Option<bool>,
+    pub auto_java: Option<bool>,
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -8,6 +20,8 @@ pub struct Config {
     pub game_dir: String,
     pub player: String,
     pub java: String,
+    pub java_paths: Vec<String>,
+    pub hidden_java: Vec<String>,
     pub memory: u32,
     pub selected: String,
     pub isolated: bool,
@@ -19,6 +33,12 @@ pub struct Config {
     pub auto_java: bool,
     pub dark_mode: bool,
     pub extra_jvm: String,
+    pub wallpaper: String,
+    pub ui_scale: f32,
+    pub reduce_motion: bool,
+    pub favorites: Vec<String>,
+    pub version_settings: BTreeMap<String, VersionSettings>,
+    pub start_page: String,
 }
 
 impl Default for Config {
@@ -27,6 +47,8 @@ impl Default for Config {
             game_dir: data_dir().join("minecraft").to_string_lossy().into(),
             player: "Player".into(),
             java: String::new(),
+            java_paths: vec![],
+            hidden_java: vec![],
             memory: 2048,
             selected: String::new(),
             isolated: true,
@@ -38,6 +60,12 @@ impl Default for Config {
             auto_java: true,
             dark_mode: false,
             extra_jvm: String::new(),
+            wallpaper: String::new(),
+            ui_scale: 1.,
+            reduce_motion: false,
+            favorites: vec![],
+            version_settings: BTreeMap::new(),
+            start_page: "home".into(),
         }
     }
 }
@@ -93,6 +121,22 @@ impl Config {
             bail!("下载并发应在 1–32 之间");
         }
         shell_words::split(&self.extra_jvm).context("额外 JVM 参数的引号未闭合")?;
+        if !self.ui_scale.is_finite() || !(0.8..=1.5).contains(&self.ui_scale) {
+            bail!("界面缩放应在 80%–150% 之间");
+        }
+        for settings in self.version_settings.values() {
+            if settings.memory.is_some_and(|m| !(512..=65536).contains(&m)) {
+                bail!("版本内存超出允许范围");
+            }
+            if let Some(args) = &settings.extra_jvm {
+                shell_words::split(args).context("版本 JVM 参数的引号未闭合")?;
+            }
+            if settings.width.is_some_and(|v| !(320..=7680).contains(&v))
+                || settings.height.is_some_and(|v| !(240..=4320).contains(&v))
+            {
+                bail!("版本窗口尺寸超出允许范围");
+            }
+        }
         Ok(())
     }
     pub fn normalize(&mut self) {
@@ -107,6 +151,58 @@ impl Config {
         self.directories.sort();
         self.directories.dedup();
         self.download_threads = self.download_threads.clamp(1, 32);
+        if !self.ui_scale.is_finite() {
+            self.ui_scale = 1.;
+        }
+        self.ui_scale = self.ui_scale.clamp(0.8, 1.5);
+        self.favorites.sort();
+        self.favorites.dedup();
+        self.java_paths.retain(|path| !path.trim().is_empty());
+        self.java_paths.sort();
+        self.java_paths.dedup();
+        self.hidden_java.sort();
+        self.hidden_java.dedup();
+    }
+    pub fn for_selected(&self) -> Self {
+        let mut config = self.clone();
+        if let Some(settings) = self.version_settings.get(&self.selected) {
+            if let Some(memory) = settings.memory {
+                config.memory = memory;
+            }
+            if let Some(java) = &settings.java {
+                config.java = java.clone();
+            }
+            if let Some(args) = &settings.extra_jvm {
+                config.extra_jvm = args.clone();
+            }
+            if let Some(width) = settings.width {
+                config.width = width;
+            }
+            if let Some(height) = settings.height {
+                config.height = height;
+            }
+            if let Some(isolated) = settings.isolated {
+                config.isolated = isolated;
+            }
+            if let Some(auto_java) = settings.auto_java {
+                config.auto_java = auto_java;
+            }
+        }
+        config
+    }
+    pub fn remap_instance(&mut self, old: &str, new: &str, rename: bool) {
+        if let Some(settings) = self.version_settings.get(old).cloned() {
+            self.version_settings.insert(new.into(), settings);
+        }
+        if self.favorites.iter().any(|id| id == old) {
+            self.favorites.push(new.into());
+        }
+        if rename {
+            self.version_settings.remove(old);
+            self.favorites.retain(|id| id != old);
+        }
+        self.selected = new.into();
+        self.normalize();
     }
 }
 
@@ -126,6 +222,58 @@ pub fn validate_player(player: &str) -> Result<()> {
 mod tests {
     use super::*;
     #[test]
+    fn per_version_settings_do_not_change_global_defaults() {
+        let mut config = Config {
+            selected: "fabric".into(),
+            ..Default::default()
+        };
+        config.version_settings.insert(
+            "fabric".into(),
+            VersionSettings {
+                memory: Some(4096),
+                java: Some("java17".into()),
+                extra_jvm: None,
+                ..Default::default()
+            },
+        );
+        assert_eq!(config.for_selected().memory, 4096);
+        assert_eq!(config.memory, 2048);
+        assert_eq!(config.for_selected().java, "java17");
+        config.selected = "vanilla".into();
+        assert_eq!(config.for_selected().memory, 2048);
+    }
+    #[test]
+    fn per_instance_window_and_directory_overrides_round_trip() {
+        let mut config = Config {
+            selected: "custom".into(),
+            ..Default::default()
+        };
+        config.version_settings.insert(
+            "custom".into(),
+            VersionSettings {
+                width: Some(1280),
+                height: Some(720),
+                isolated: Some(false),
+                auto_java: Some(false),
+                ..Default::default()
+            },
+        );
+        let saved = serde_json::to_vec(&config).unwrap();
+        let restored: Config = serde_json::from_slice(&saved).unwrap();
+        let effective = restored.for_selected();
+        assert_eq!((effective.width, effective.height), (1280, 720));
+        assert!(!effective.isolated);
+        assert!(!effective.auto_java);
+        assert_eq!((restored.width, restored.height), (854, 480));
+        assert!(restored.isolated);
+        assert!(restored.auto_java);
+        let mut invalid = restored;
+        invalid.version_settings.get_mut("custom").unwrap().width = Some(0);
+        assert!(invalid.validate().is_err());
+        let old: VersionSettings = serde_json::from_str(r#"{"memory":4096}"#).unwrap();
+        assert!(old.width.is_none() && old.isolated.is_none());
+    }
+    #[test]
     fn migrate_old_settings() {
         let mut c: Config =
             serde_json::from_str(r#"{"player":"Steve","game_dir":"games"}"#).unwrap();
@@ -134,6 +282,28 @@ mod tests {
         assert_eq!(c.directories, vec!["games"]);
         assert_eq!(c.download_threads, 8);
         assert!(c.auto_java);
+    }
+    #[test]
+    fn cloning_and_renaming_keep_instance_preferences_independent() {
+        let mut config = Config::default();
+        config.favorites.push("original".into());
+        config.version_settings.insert(
+            "original".into(),
+            VersionSettings {
+                memory: Some(4096),
+                ..Default::default()
+            },
+        );
+        config.remap_instance("original", "copy", false);
+        assert_eq!(config.selected, "copy");
+        assert!(config.version_settings.contains_key("original"));
+        config.version_settings.get_mut("copy").unwrap().memory = Some(8192);
+        assert_eq!(config.version_settings["original"].memory, Some(4096));
+        config.remap_instance("copy", "renamed", true);
+        assert!(!config.version_settings.contains_key("copy"));
+        assert_eq!(config.version_settings["renamed"].memory, Some(8192));
+        assert!(config.favorites.contains(&"renamed".into()));
+        assert!(!config.favorites.contains(&"copy".into()));
     }
     #[test]
     fn reject_invalid_players_and_arguments() {

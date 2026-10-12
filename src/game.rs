@@ -33,6 +33,12 @@ pub enum Event {
     Progress(f32, String),
     Versions(Vec<Version>),
     Java(String),
+    Runtimes(Vec<crate::java_runtime::Runtime>),
+    InstanceChanged {
+        old: String,
+        new: String,
+        renamed: bool,
+    },
     Installed(String),
     Projects(Vec<crate::modrinth::Project>),
     Log(String),
@@ -422,6 +428,7 @@ impl Worker {
         Ok(())
     }
     pub fn launch(&self, config: &crate::config::Config) -> Result<()> {
+        let config = config.for_selected();
         config.validate()?;
         if config.selected.is_empty() {
             bail!("请先选择游戏版本");
@@ -433,11 +440,11 @@ impl Worker {
         self.prepare(&root, &config.selected, &meta)?;
         let required = meta["javaVersion"]["majorVersion"].as_u64().unwrap_or(8) as u32;
         let java = if config.java.trim().is_empty() {
-            match find_java(required) {
+            match find_java_in(required, &config.java_paths, &config.hidden_java) {
                 Some(java) => java,
                 None if config.auto_java => {
                     self.download_java(required)?;
-                    find_java(required).context("未找到下载的 Java")?
+                    find_managed_java(required).context("未找到下载的 Java")?
                 }
                 None => bail!("需要 Java {required}，请在 Java 管理页面下载或设置路径"),
             }
@@ -472,7 +479,7 @@ impl Worker {
                 }
             }
         }
-        let args = launch_args(config, &root, &game_dir, &dir, &meta)?;
+        let args = launch_args(&config, &root, &game_dir, &dir, &meta)?;
         self.check()?;
         fs::create_dir_all(crate::config::data_dir())?;
         let log_path = crate::config::data_dir().join("game.log");
@@ -543,7 +550,7 @@ fn decode_log(bytes: &[u8]) -> String {
         Err(_) => String::from_utf8_lossy(bytes).into_owned(),
     }
 }
-fn java_compatible_path(path: PathBuf) -> PathBuf {
+pub(crate) fn java_compatible_path(path: PathBuf) -> PathBuf {
     let text = path.to_string_lossy();
     if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
         PathBuf::from(format!(r"\\{rest}"))
@@ -589,6 +596,8 @@ pub fn offline_uuid(name: &str) -> String {
     hash.iter().map(|b| format!("{b:02x}")).collect()
 }
 pub fn instance_dir(config: &crate::config::Config) -> Result<PathBuf> {
+    let effective = config.for_selected();
+    let config = &effective;
     let root = PathBuf::from(&config.game_dir);
     let dir = version_dir(&root, &config.selected)?;
     let pack = fs::read(dir.join(format!("{}.json", config.selected)))
@@ -720,52 +729,39 @@ fn launch_args(
     Ok(args)
 }
 pub fn java_major(path: &Path) -> Result<u32> {
-    let output = Command::new(path).arg("-version").output()?;
-    if !output.status.success() {
-        bail!("Java 检测失败");
-    }
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stderr),
-        String::from_utf8_lossy(&output.stdout)
-    );
-    let version = text.split('"').nth(1).context("无法识别 Java 版本")?;
-    let mut parts = version.split('.');
-    let first = parts.next().unwrap();
-    Ok(if first == "1" {
-        parts.next().context("无效 Java 版本")?
-    } else {
-        first
-    }
-    .parse()?)
+    Ok(crate::java_runtime::probe(path)?.major)
 }
-pub fn find_java(required: u32) -> Option<PathBuf> {
-    let mut paths = vec![];
-    let managed = crate::config::data_dir()
-        .join("java")
-        .join(required.to_string());
-    for entry in walkdir::WalkDir::new(managed)
-        .max_depth(7)
+fn find_java_in(required: u32, registered: &[String], hidden: &[String]) -> Option<PathBuf> {
+    crate::java_runtime::candidates(registered)
         .into_iter()
-        .filter_map(Result::ok)
-    {
-        if entry.file_type().is_file()
-            && entry.file_name() == if cfg!(windows) { "java.exe" } else { "java" }
-        {
-            paths.push(entry.into_path());
-        }
-    }
-    if let Some(home) = std::env::var_os("JAVA_HOME") {
-        paths.push(PathBuf::from(home).join("bin").join(if cfg!(windows) {
-            "java.exe"
-        } else {
-            "java"
-        }));
-    }
-    paths.push(PathBuf::from("java"));
-    paths
-        .into_iter()
-        .find(|path| java_major(path).is_ok_and(|major| major == required))
+        .find_map(|path| {
+            crate::java_runtime::probe(&path)
+                .ok()
+                .filter(|runtime| {
+                    runtime.major == required
+                        && !crate::java_runtime::is_hidden(&runtime.path, hidden)
+                })
+                .map(|runtime| runtime.path)
+        })
+}
+fn find_managed_java(required: u32) -> Option<PathBuf> {
+    walkdir::WalkDir::new(
+        crate::config::data_dir()
+            .join("java")
+            .join(required.to_string()),
+    )
+    .max_depth(7)
+    .into_iter()
+    .filter_map(Result::ok)
+    .filter(|entry| {
+        entry.file_type().is_file() && entry.file_name() == crate::java_runtime::executable()
+    })
+    .find_map(|entry| {
+        crate::java_runtime::probe(entry.path())
+            .ok()
+            .filter(|runtime| runtime.major == required)
+            .map(|runtime| runtime.path)
+    })
 }
 impl Worker {
     pub fn download_java(&self, major: u32) -> Result<()> {
@@ -829,7 +825,7 @@ impl Worker {
                 }
             }
         }
-        let java = find_java(major).context("解压后未找到可用 Java")?;
+        let java = find_managed_java(major).context("解压后未找到可用 Java")?;
         self.tx.send(Event::Java(java.to_string_lossy().into()))?;
         self.status(format!("Java {major} 已安装"));
         Ok(())
@@ -915,6 +911,48 @@ mod tests {
         assert!(args.contains(&"space dir".into()));
         assert!(args.contains(&"net.minecraft.client.main.Main".into()));
         assert!(args.contains(&"-Xmx2048M".into()));
+    }
+    #[test]
+    fn per_instance_settings_reach_launch_arguments_and_mod_directory() {
+        let mut config = crate::config::Config {
+            game_dir: "fixture-root".into(),
+            selected: "custom".into(),
+            ..Default::default()
+        };
+        config.version_settings.insert(
+            "custom".into(),
+            crate::config::VersionSettings {
+                width: Some(1280),
+                height: Some(720),
+                memory: Some(4096),
+                isolated: Some(false),
+                ..Default::default()
+            },
+        );
+        let effective = config.for_selected();
+        assert_eq!(
+            instance_dir(&config).unwrap(),
+            PathBuf::from("fixture-root")
+        );
+        assert_eq!(
+            crate::mods::directory(&config).unwrap(),
+            PathBuf::from("fixture-root").join("mods")
+        );
+        let meta = json!({"mainClass":"net.minecraft.client.main.Main","libraries":[],"arguments":{"jvm":["-cp","${classpath}"],"game":[{"rules":[{"action":"allow","features":{"has_custom_resolution":true}}],"value":["--width","${resolution_width}","--height","${resolution_height}"]}]}});
+        let args = launch_args(
+            &effective,
+            Path::new("fixture-root"),
+            &instance_dir(&config).unwrap(),
+            Path::new("version"),
+            &meta,
+        )
+        .unwrap();
+        assert!(args.contains(&"-Xmx4096M".into()));
+        assert!(args
+            .windows(4)
+            .any(|v| v == ["--width", "1280", "--height", "720"]));
+        assert!(config.isolated);
+        assert_eq!(config.memory, 2048);
     }
     #[test]
     fn download_repairs_corrupt_file_and_reuses_verified_cache() {

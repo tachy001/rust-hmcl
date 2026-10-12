@@ -1,4 +1,4 @@
-# Rust HMCL 0.3.0
+# Rust HMCL 0.3.6
 
 参考 HMCL 的 Rust 原生桌面启动器。当前目录是独立的 Rust 项目根目录；本机参考用的原 Java 源码保留在相邻的 `../HMCL-main/`。启动器无需 Java 或 WebView，Minecraft 仍由单独的 Java 进程运行。
 
@@ -20,7 +20,7 @@ rust-hmcl/
 
 ## 运行和使用
 
-运行 dist/v0.3.0/rust-hmcl.exe，或解压发行包后运行其中的 rust-hmcl.exe。
+运行 dist/v0.3.6/rust-hmcl.exe，或解压发行包后运行其中的 rust-hmcl.exe。
 
 1. 在“账户”添加或切换离线用户名。
 2. 在“下载游戏”安装正式版或快照，在“首页”选择版本并启动。
@@ -45,9 +45,25 @@ rust-hmcl/
 - 日志筛选、跟随、复制、打开文件、中文输出和结束游戏。
 - 配置迁移与备份，原生文件选择和 Windows Java 路径修复。
 
-## 0.3.0 界面更新
+## 0.3.6 界面还原
 
-图标路径直接取自 HMCL 的 SVG.java，PNG 和壁纸来自原 resources/assets/img，来源记录见 assets/hmcl/ATTRIBUTION.md。新增按钮悬停渐变、按压反馈、点击水波纹、侧栏选中动画、开关滑动和 220 ms 页面淡入/位移。资源内嵌在程序中，不需要联网下载。自定义窗口标题栏支持拖动、双击最大化、最小化与关闭。
+图标路径直接取自 HMCL 的 SVG.java，PNG 和壁纸来自原 resources/assets/img，来源记录见 assets/hmcl/ATTRIBUTION.md。保留按钮悬停渐变、按压反馈、点击水波纹、侧栏选中动画和开关滑动；页面采用 320 ms 淡入与缓动位移，版本菜单带展开、收起和箭头旋转。动画默认开启，可在“外观”关闭“减少动画和动态效果”以恢复动效。资源内嵌在程序中，不需要联网下载。自定义窗口标题栏支持拖动、双击最大化、最小化与关闭。
+
+首页按原版 MainPage 与 root.css 恢复简洁布局和右下角 230×57 分体启动区；标题栏 40、侧栏 200，全窗口壁纸透过侧栏显示。版本管理按 GameListCell 改为单选按钮、32 像素图标、两行信息及启动/更多菜单；显示真实 Minecraft 与 Fabric/Quilt 信息，右键菜单保留已有操作。外观页支持自定义壁纸、界面缩放和启动页面；版本设置未覆盖的选项沿用全局配置。
+
+完整还原尚未完成。参照文件、待还原功能与验收要求见 docs/HMCL-PARITY.md。用户禁止电脑操控，本轮采用内存中的 egui 布局与模拟事件测试，没有操作桌面，也没有宣称通过新界面截图验证。
+
+当前实例入口恢复为“实例管理”，账户头像采用 HMCL 内置皮肤和原 UUID 选择规则，标题图标采用原 icon-title。离屏预览发现并修复了壁纸遮盖其他控件的图层顺序问题。
+
+实例管理采用原版侧栏结构，提供游戏设置、自动安装、模组、资源包、世界与原理图分页，截图从管理菜单进入。独立内存、Java、JVM、窗口尺寸、隔离和自动下载设置在保存后生效；不覆盖全局配置。本地内容分页目前提供文件列表与打开操作，完整世界编辑和资源包启用排序尚待还原。
+
+Java 管理使用紧凑环境列表，支持后台发现、添加可执行文件、选择、打开目录以及隐藏/恢复。自动选择跳过隐藏环境；隐藏保留文件，受管 Java 卸载尚未实现。可用 `--scan-java` 在命令行核验实际环境。检测 Java 时进程保持隐藏并有超时；启动器启动本身不依赖 Java。
+
+实例菜单支持复制和重命名：复制保留独立游戏目录的数据并继承原设置，共享目录仍然共享；重命名会同步其他实例的继承引用。两种操作不覆盖同名目标，重命名失败会尝试回滚；如回滚受文件系统错误阻碍，会明确报告并保留目录供恢复。含链接或特殊文件的实例暂不支持此操作。独立配置与收藏同步迁移，原游戏 JAR 字节保持不变。
+
+命令行可用 `--duplicate <原名称> <新名称>`、`--rename <原名称> <新名称>`；这些命令实际修改当前数据目录，使用 `RUST_HMCL_DATA_DIR` 可隔离验证。操作对话框可用 `--render-ui output.png versions light 1080 700 duplicate` 或末尾 `rename` 生成离屏预览，预览不执行文件操作。
+
+无需桌面操控即可生成实际 UI 的软件预览：`cargo run -- --render-ui output.png versions dark 1080 700`。支持页面 key：home、accounts、versions、mods、packs、download、java、settings、logs、about、appearance、instance。instance 页可额外指定 settings、components、mods、resources、worlds、schematics 或 screenshots 分页，例如 `--render-ui output.png instance dark 1080 700 mods`。Java 页预览会通过隐藏进程检测真实 Java；其他页面无需执行 Java。命令只读取配置，不创建窗口、不模拟系统输入、不保存用户配置；仅输出指定图片。预览用于布局检查，不能代替真实 GPU 与三端运行验证。
 
 ## 数据目录
 
@@ -84,7 +100,7 @@ cargo run --locked
 
 ## 验证
 
-Windows 开发/发布构建、严格静态检查、18 项本地测试通过。Minecraft、Adoptium、Fabric/Quilt、Modrinth 的四项联网测试通过；执行 cargo test --locked -- --ignored 可重复联网测试。
+Windows 开发/发布构建、严格静态检查、34 项本地测试通过。Minecraft、Adoptium、Fabric/Quilt、Modrinth 的四项联网测试此前通过，本轮未重复联网测试；执行 cargo test --locked -- --ignored 可重复联网测试。
 
 实际安装 Minecraft 1.20.1、3,575 个资源、Java 17 和 Fabric Loader 0.19.5。游戏成功打开初次启动界面，Fabric、LWJGL、音频和资源初始化正常。Fabric API 已从 Modrinth 下载并校验。实际导入测试 .mrpack，验证继承和客户端 overrides 优先级。
 

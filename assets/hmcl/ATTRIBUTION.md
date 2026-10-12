@@ -13,3 +13,8 @@ SVG.java identifies most icons as Google Material Symbols, normalized to a
 implementation retains the original path data rather than substituting emoji.
 
 reference-blue.css is an unmodified reference copy of the original theme palette.
+
+title.png comes from HMCL/resources/assets/img/icon-title@2x.png. The skins/
+directory comes from HMCLCore/resources/assets/img/skin/; these are the original
+built-in Minecraft default skins, used to draw the face and hat layers. Minecraft
+skin artwork remains subject to its original rights and is not newly authored here.
