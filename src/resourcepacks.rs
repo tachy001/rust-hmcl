@@ -343,6 +343,12 @@ pub fn list(context: &ContextInfo) -> Result<Vec<Pack>> {
     let mut packs = vec![];
     for entry in fs::read_dir(&context.directory)? {
         let path = entry?.path();
+        if path.file_name().is_some_and(|name| {
+            name.to_string_lossy()
+                .starts_with(".rust-hmcl-resourcepack-folder-")
+        }) {
+            continue;
+        }
         let attr = fs::symlink_metadata(&path)?;
         if attr.file_type().is_symlink() {
             continue;
@@ -505,8 +511,7 @@ impl Options {
                 fs::set_permissions(&temp, fs::metadata(&self.path)?.permissions())?;
                 fs::rename(&temp, &self.path)?;
             } else {
-                fs::hard_link(&temp, &self.path)?;
-                fs::remove_file(&temp)?;
+                commit_new(&temp, &self.path)?;
             }
             Ok(())
         })();
@@ -563,6 +568,13 @@ pub fn set_enabled(context: &ContextInfo, names: &[String], enable: bool) -> Res
     options.save()
 }
 pub fn import(context: &ContextInfo, source: &Path) -> Result<()> {
+    let attributes = fs::symlink_metadata(source)?;
+    if attributes.file_type().is_symlink() {
+        bail!("暂不支持链接资源包");
+    }
+    if attributes.is_dir() {
+        return import_directory(context, source);
+    }
     if !source
         .extension()
         .is_some_and(|v| v.eq_ignore_ascii_case("zip"))
@@ -589,12 +601,152 @@ pub fn import(context: &ContextInfo, source: &Path) -> Result<()> {
         drop(output);
         // HMCL permits valid ZIPs with missing metadata, then shows a warning.
         zip::ZipArchive::new(fs::File::open(&temp)?).context("资源包不是可读取的 ZIP")?;
-        fs::hard_link(&temp, &destination).context("无法提交资源包，目标未被覆盖")?;
-        fs::remove_file(&temp)?;
+        commit_new(&temp, &destination).context("无法提交资源包，目标未被覆盖")?;
         Ok(())
     })();
     if temp.exists() {
         let _ = fs::remove_file(temp);
+    }
+    result
+}
+
+fn commit_new(source: &Path, destination: &Path) -> Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn MoveFileExW(source: *const u16, destination: *const u16, flags: u32) -> i32;
+        }
+        let source = fs::canonicalize(source)?;
+        let destination = fs::canonicalize(destination.parent().context("缺少目标目录")?)?
+            .join(destination.file_name().context("缺少目标名称")?);
+        let from: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
+        let to: Vec<u16> = destination
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+        // No REPLACE_EXISTING: files and even empty directories must be retained.
+        if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) } == 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        if source.is_dir() {
+            // Reserve exclusively; Unix rename can replace this owned empty dir.
+            fs::create_dir(destination)?;
+            if let Err(error) = fs::rename(source, destination) {
+                let _ = fs::remove_dir(destination);
+                return Err(error.into());
+            }
+        } else {
+            fs::hard_link(source, destination)?;
+            fs::remove_file(source)?;
+        }
+        Ok(())
+    }
+}
+fn future_path(path: &Path) -> Result<PathBuf> {
+    let mut ancestor = std::path::absolute(path)?;
+    let mut tail = vec![];
+    while !ancestor.exists() {
+        tail.push(
+            ancestor
+                .file_name()
+                .context("目标路径没有已存在的父目录")?
+                .to_os_string(),
+        );
+        if !ancestor.pop() {
+            bail!("目标路径无效");
+        }
+    }
+    let mut result = fs::canonicalize(ancestor)?;
+    for name in tail.into_iter().rev() {
+        result.push(name);
+    }
+    Ok(result)
+}
+fn cleanup_directory(stage: &Path, parent: &Path) -> Result<()> {
+    let stage = fs::canonicalize(stage)?;
+    let parent = fs::canonicalize(parent)?;
+    if stage.parent() != Some(parent.as_path())
+        || !stage.file_name().is_some_and(|name| {
+            name.to_string_lossy()
+                .starts_with(".rust-hmcl-resourcepack-folder-")
+        })
+    {
+        bail!("未清理不属于导入任务的目录");
+    }
+    #[cfg(target_os = "windows")]
+    #[allow(clippy::permissions_set_readonly_false)] // Windows attribute, never Unix modes.
+    for entry in walkdir::WalkDir::new(&stage).follow_links(false) {
+        let entry = entry?;
+        if entry.file_type().is_file() {
+            let mut permissions = fs::symlink_metadata(entry.path())?.permissions();
+            if permissions.readonly() {
+                permissions.set_readonly(false);
+                fs::set_permissions(entry.path(), permissions)?;
+            }
+        }
+    }
+    fs::remove_dir_all(stage)?;
+    Ok(())
+}
+fn import_directory(context: &ContextInfo, source: &Path) -> Result<()> {
+    read_limited(&source.join("pack.mcmeta"), 1024 * 1024)
+        .context("文件夹根目录必须包含普通 pack.mcmeta 文件")?;
+    let source = fs::canonicalize(source)?;
+    if future_path(&context.directory)?.starts_with(&source) {
+        bail!("导入目标位于资源包内部，无法递归复制");
+    }
+    let destination = context
+        .directory
+        .join(source.file_name().context("缺少文件夹名称")?);
+    if fs::symlink_metadata(&destination).is_ok() {
+        bail!("同名资源包已存在，不会覆盖");
+    }
+    fs::create_dir_all(&context.directory)?;
+    let stage = temporary(&context.directory, "resourcepack-folder");
+    fs::create_dir(&stage)?;
+    let result = (|| -> Result<()> {
+        for entry in walkdir::WalkDir::new(&source)
+            .follow_links(false)
+            .into_iter()
+            .skip(1)
+        {
+            let entry = entry?;
+            let attributes = fs::symlink_metadata(entry.path())?;
+            if attributes.file_type().is_symlink()
+                || !entry.path().canonicalize()?.starts_with(&source)
+            {
+                bail!("资源包包含链接文件，原文件夹保持不变");
+            }
+            let target = stage.join(entry.path().strip_prefix(&source)?);
+            if attributes.is_dir() {
+                fs::create_dir(&target)?;
+            } else if attributes.is_file() {
+                let mut input = fs::File::open(entry.path())?;
+                let mut output = fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&target)?;
+                std::io::copy(&mut input, &mut output)?;
+                output.sync_all()?;
+                drop(output);
+                fs::set_permissions(&target, attributes.permissions())?;
+            } else {
+                bail!("资源包包含特殊文件，不能导入");
+            }
+        }
+        commit_new(&stage, &destination)?;
+        Ok(())
+    })();
+    if result.is_err() && stage.exists() {
+        cleanup_directory(&stage, &context.directory)
+            .context("导入未完成；临时目录清理失败，保留供检查")?;
     }
     result
 }
@@ -660,6 +812,84 @@ mod tests {
                 .starts_with("rust-hmcl-resourcepacks-"));
             fs::remove_dir_all(root).unwrap();
         }
+    }
+    #[test]
+    fn directory_import_preserves_nested_and_empty_content_and_enable_identity() {
+        let fixture = Fixture::new();
+        let context = fixture.context(15, true);
+        let source = fixture.0.join("folder-resource");
+        fs::create_dir_all(source.join("assets/minecraft/textures")).unwrap();
+        fs::create_dir(source.join("empty")).unwrap();
+        fs::write(
+            source.join("pack.mcmeta"),
+            br#"{"pack":{"pack_format":15,"description":"folder fixture"}}"#,
+        )
+        .unwrap();
+        fs::write(
+            source.join("assets/minecraft/textures/sample.png"),
+            b"byte exact asset fixture",
+        )
+        .unwrap();
+        import(&context, &source).unwrap();
+        let destination = context.directory.join("folder-resource");
+        assert!(destination.join("empty").is_dir());
+        for name in ["pack.mcmeta", "assets/minecraft/textures/sample.png"] {
+            assert_eq!(
+                fs::read(source.join(name)).unwrap(),
+                fs::read(destination.join(name)).unwrap()
+            );
+        }
+        assert!(import(&context, &source).is_err());
+        assert_eq!(fs::read_dir(&context.directory).unwrap().count(), 1);
+        set_enabled(&context, &["folder-resource".into()], true).unwrap();
+        assert!(list(&context).unwrap()[0].enabled);
+        assert!(Options::load(context.directory.parent().unwrap())
+            .unwrap()
+            .enabled
+            .contains(&"file/folder-resource".into()));
+    }
+    #[test]
+    fn invalid_recursive_and_existing_directory_imports_preserve_their_targets() {
+        let fixture = Fixture::new();
+        let context = fixture.context(15, true);
+        let source = fixture.0.join("folder-resource");
+        fs::create_dir(&source).unwrap();
+        assert!(import(&context, &source).is_err());
+        assert!(!context.directory.exists());
+        fs::write(
+            source.join("pack.mcmeta"),
+            b"invalid JSON is still a folder pack with a warning",
+        )
+        .unwrap();
+        let recursive = ContextInfo {
+            directory: source.join("resourcepacks"),
+            ..context.clone()
+        };
+        assert!(import(&recursive, &source).is_err());
+        assert!(!recursive.directory.exists());
+        fs::create_dir_all(context.directory.join("folder-resource")).unwrap();
+        assert!(import(&context, &source).is_err());
+        assert_eq!(
+            fs::read_dir(context.directory.join("folder-resource"))
+                .unwrap()
+                .count(),
+            0
+        );
+        let staged = fixture.0.join("staged-file");
+        let existing = fixture.0.join("existing-file");
+        fs::write(&staged, b"new").unwrap();
+        fs::write(&existing, b"original").unwrap();
+        assert!(commit_new(&staged, &existing).is_err());
+        assert_eq!(fs::read(&existing).unwrap(), b"original");
+        assert_eq!(fs::read(&staged).unwrap(), b"new");
+        let staged_dir = fixture.0.join("staged-directory");
+        let existing_dir = fixture.0.join("existing-directory");
+        fs::create_dir(&staged_dir).unwrap();
+        fs::write(staged_dir.join("file"), b"new").unwrap();
+        fs::create_dir(&existing_dir).unwrap();
+        assert!(commit_new(&staged_dir, &existing_dir).is_err());
+        assert!(staged_dir.join("file").exists());
+        assert_eq!(fs::read_dir(existing_dir).unwrap().count(), 0);
     }
     #[test]
     fn compatibility_matches_hmcl_legacy_supported_and_new_minor_ranges() {

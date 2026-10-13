@@ -4,9 +4,9 @@
 
 截图管理支持后台 72×72 缩略图、预览、图片复制、设为壁纸、多选与确认删除。离屏检查可用 `--render-ui output.png instance dark 1080 700 screenshots`，末尾追加 `preview` 或 `delete` 可检查对应弹窗，均不会实际删除文件或写入剪贴板。
 
-资源包管理支持后台读取 ZIP / 文件夹的图标、描述和兼容性、本地搜索、ZIP 导入及单个／批量启用禁用；不兼容包启用前弹窗确认。它修改隔离或共享游戏目录的 `options.txt`，保留其他设置、已有资源包顺序和未知内容；游戏运行期间暂不允许修改。
+资源包管理支持后台读取 ZIP / 文件夹的图标、描述和兼容性、本地搜索、ZIP／文件夹导入及单个／批量启用禁用；不兼容包启用前弹窗确认。它修改隔离或共享游戏目录的 `options.txt`，保留其他设置、已有资源包顺序和未知内容；游戏运行期间暂不允许修改。
 
-命令行可用 `--resourcepack-list`、`--resourcepack-import <ZIP>`、`--resourcepack-enable <文件名>`、`--resourcepack-disable <文件名>`；启用命令是明确的修改操作，会登记不兼容包。使用 `RUST_HMCL_DATA_DIR` 可在独立数据目录验证。资源包列表与详情离屏预览使用 `--render-ui output.png instance light 1080 700 resources`，末尾可追加 `info` 或 `warning`；预览不修改游戏设置。
+命令行可用 `--resourcepack-list`、`--resourcepack-import <ZIP或文件夹>`、`--resourcepack-enable <文件名>`、`--resourcepack-disable <文件名>`；启用命令是明确的修改操作，会登记不兼容包。资源包页支持拖入 ZIP 或文件夹，右键“添加资源包”可选择文件夹。使用 `RUST_HMCL_DATA_DIR` 可在独立数据目录验证。资源包列表与详情离屏预览使用 `--render-ui output.png instance light 1080 700 resources`，末尾可追加 `info` 或 `warning`；预览不修改游戏设置。
 
 ## 项目结构
 
@@ -71,7 +71,7 @@ Java 管理使用紧凑环境列表，支持后台发现、添加可执行文件
 
 实例菜单支持复制和重命名：复制保留独立游戏目录的数据并继承原设置，共享目录仍然共享；重命名会同步其他实例的继承引用。两种操作不覆盖同名目标，重命名失败会尝试回滚；如回滚受文件系统错误阻碍，会明确报告并保留目录供恢复。含链接或特殊文件的实例暂不支持此操作。独立配置与收藏同步迁移，原游戏 JAR 字节保持不变。
 
-命令行可用 `--duplicate <原名称> <新名称>`、`--rename <原名称> <新名称>`；这些命令实际修改当前数据目录，使用 `RUST_HMCL_DATA_DIR` 可隔离验证。操作对话框可用 `--render-ui output.png versions light 1080 700 duplicate` 或末尾 `rename` 生成离屏预览，预览不执行文件操作。
+命令行可用 `--duplicate <原名称> <新名称>`、`--rename <原名称> <新名称>`；这些命令实际修改当前数据目录，资源包页支持拖入 ZIP 或文件夹，右键“添加资源包”可选择文件夹。使用 `RUST_HMCL_DATA_DIR` 可隔离验证。操作对话框可用 `--render-ui output.png versions light 1080 700 duplicate` 或末尾 `rename` 生成离屏预览，预览不执行文件操作。
 
 无需桌面操控即可生成实际 UI 的软件预览：`cargo run -- --render-ui output.png versions dark 1080 700`。支持页面 key：home、accounts、versions、mods、packs、download、java、settings、logs、about、appearance、instance。instance 页可额外指定 settings、components、mods、resources、worlds、schematics 或 screenshots 分页，例如 `--render-ui output.png instance dark 1080 700 mods`。Java 页预览会通过隐藏进程检测真实 Java；其他页面无需执行 Java。命令只读取配置，不创建窗口、不模拟系统输入、不保存用户配置；仅输出指定图片。预览用于布局检查，不能代替真实 GPU 与三端运行验证。
 

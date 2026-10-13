@@ -55,7 +55,40 @@ mod tests {
         };
         let ctx = egui::Context::default();
         let mut browser = Browser::default();
-        browser.refresh(&config, &ctx, Some(vec![valid.clone(), bad]));
+        browser.prepare_preview(&config, &ctx).unwrap();
+        let folder = root.join("folder-resource");
+        fs::create_dir(&folder).unwrap();
+        fs::write(
+            folder.join("pack.mcmeta"),
+            br#"{"pack":{"pack_format":15,"description":"folder fixture"}}"#,
+        )
+        .unwrap();
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(800., 500.),
+                )),
+                dropped_files: vec![
+                    egui::DroppedFile {
+                        path: Some(valid.clone()),
+                        ..Default::default()
+                    },
+                    egui::DroppedFile {
+                        path: Some(bad),
+                        ..Default::default()
+                    },
+                    egui::DroppedFile {
+                        path: Some(folder),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| browser.page(ui, &config, false));
+            },
+        );
         let result = browser
             .rx
             .take()
@@ -63,8 +96,12 @@ mod tests {
             .recv_timeout(std::time::Duration::from_secs(10))
             .unwrap();
         browser.install(result, &ctx);
-        assert_eq!(browser.rows.len(), 1);
-        assert_eq!(browser.rows[0].pack.name, "valid.zip");
+        assert_eq!(browser.rows.len(), 2);
+        assert!(browser.rows.iter().any(|row| row.pack.name == "valid.zip"));
+        assert!(browser
+            .rows
+            .iter()
+            .any(|row| row.pack.name == "folder-resource"));
         assert!(browser.context.is_some());
         assert!(browser.error.contains("bad.zip"));
         assert_eq!(
@@ -307,7 +344,22 @@ impl Browser {
         if blocked {
             ui.label("游戏运行或任务执行期间，资源包设置暂不可修改。");
         }
-        let ready = self.rx.is_none() && !blocked;
+        let dropped = ui
+            .ctx()
+            .input_mut(|input| std::mem::take(&mut input.raw.dropped_files));
+        if !dropped.is_empty() {
+            if self.rx.is_none() && !blocked && ui.is_enabled() {
+                let sources: Vec<_> = dropped.into_iter().filter_map(|file| file.path).collect();
+                if sources.is_empty() {
+                    self.error = "拖放文件缺少本地路径".into();
+                } else {
+                    self.refresh(config, ui.ctx(), Some(sources));
+                }
+            } else {
+                self.error = "请等待当前任务结束后再导入资源包".into();
+            }
+        }
+        let ready = self.rx.is_none() && !blocked && ui.is_enabled();
         let mut change = None;
         ui.horizontal_wrapped(|ui| {
             if self.selected.is_empty() {
@@ -317,10 +369,23 @@ impl Browser {
                 {
                     self.refresh(config, ui.ctx(), None);
                 }
-                if ui
-                    .add_enabled(ready, theme::MaterialButton::new("添加资源包").icon("add"))
-                    .clicked()
-                {
+                let add =
+                    ui.add_enabled(ready, theme::MaterialButton::new("添加资源包").icon("add"));
+                add.context_menu(|ui| {
+                    if ui
+                        .add_enabled(
+                            ready,
+                            theme::MaterialButton::new("添加资源包文件夹").icon("folder"),
+                        )
+                        .clicked()
+                    {
+                        if let Some(source) = rfd::FileDialog::new().pick_folder() {
+                            self.refresh(config, ui.ctx(), Some(vec![source]));
+                        }
+                        ui.close_menu();
+                    }
+                });
+                if add.clicked() {
                     if let Some(source) = rfd::FileDialog::new()
                         .add_filter("ZIP 资源包", &["zip"])
                         .pick_files()
@@ -382,6 +447,11 @@ impl Browser {
                 ui.spinner();
             }
         });
+        ui.label(
+            egui::RichText::new("可拖入 ZIP 或资源包文件夹；右键“添加资源包”可选择文件夹。")
+                .small()
+                .color(ui.visuals().weak_text_color()),
+        );
         if self.searching {
             theme::text_field_sized(
                 ui,
