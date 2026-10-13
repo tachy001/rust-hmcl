@@ -1,11 +1,12 @@
 [package]
 name = "rust-hmcl"
-version = "0.3.6"
+version = "0.3.8"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "A native Rust Minecraft launcher inspired by HMCL"
 
 [dependencies]
+arboard = "3.6.1"
 anyhow = "1"
 dirs = "6"
 eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }

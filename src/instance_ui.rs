@@ -53,7 +53,6 @@ impl Launcher {
                 && self.instance_tab != tab
             {
                 self.instance_tab = tab;
-                self.instance_tab_started = ui.input(|input| input.time);
                 self.editing_error.clear();
             }
         }
@@ -78,7 +77,6 @@ impl Launcher {
             |ui| {
                 if theme::button(ui, "截图管理").clicked() {
                     self.instance_tab = Tab::Screenshots;
-                    self.instance_tab_started = ui.input(|input| input.time);
                     ui.memory_mut(|memory| memory.close_popup());
                 }
                 if theme::button(ui, "校验 / 修复").clicked() {
@@ -119,29 +117,25 @@ impl Launcher {
             ..self.config.clone()
         }
         .for_selected();
-        let elapsed = ui.input(|input| input.time) - self.instance_tab_started;
-        let progress = if self.config.reduce_motion || self.instance_tab_started < 0. {
-            1.
-        } else {
-            (elapsed / 0.4).clamp(0., 1.) as f32
-        };
-        let eased = 1. - (1. - progress).powi(3);
-        if progress < 1. {
-            ui.ctx().request_repaint();
-        }
-        ui.scope(|ui| {
-            ui.set_opacity(eased);
-            ui.add_space(20. * (1. - eased));
-            match self.instance_tab {
-                Tab::Settings => self.instance_settings(ui, &id),
-                Tab::Components => self.instance_components(ui, &id),
-                Tab::Mods => self.instance_mods(ui, &config),
-                Tab::Resources => self.instance_files(ui, &config, "resourcepacks", false),
-                Tab::Worlds => self.instance_files(ui, &config, "saves", true),
-                Tab::Schematics => self.instance_files(ui, &config, "schematics", false),
-                Tab::Screenshots => self.instance_files(ui, &config, "screenshots", false),
-            }
+        let mut animation = std::mem::take(&mut self.instance_transition);
+        let key = format!("{}|{}|{}", config.game_dir, id, self.instance_tab as u8);
+        let frame = animation.begin(ui, key, self.config.reduce_motion);
+        ui.add_enabled_ui(frame.interactive(), |ui| match self.instance_tab {
+            Tab::Settings => self.instance_settings(ui, &id),
+            Tab::Components => self.instance_components(ui, &id),
+            Tab::Mods => self.instance_mods(ui, &config),
+            Tab::Resources => self
+                .resourcepacks
+                .page(ui, &config, self.busy || self.running),
+            Tab::Worlds => self.instance_files(ui, &config, "saves", true),
+            Tab::Schematics => self.instance_files(ui, &config, "schematics", false),
+            Tab::Screenshots => match crate::game::instance_dir(&config) {
+                Ok(path) => self.screenshots.page(ui, path.join("screenshots")),
+                Err(error) => self.editing_error = error.to_string(),
+            },
         });
+        animation.finish(ui, frame);
+        self.instance_transition = animation;
         if !self.editing_error.is_empty() {
             ui.colored_label(
                 if self.config.dark_mode {

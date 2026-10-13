@@ -1,6 +1,12 @@
-# Rust HMCL 0.3.6
+# Rust HMCL 0.3.8
 
 参考 HMCL 的 Rust 原生桌面启动器。当前目录是独立的 Rust 项目根目录；本机参考用的原 Java 源码保留在相邻的 `../HMCL-main/`。启动器无需 Java 或 WebView，Minecraft 仍由单独的 Java 进程运行。
+
+截图管理支持后台 72×72 缩略图、预览、图片复制、设为壁纸、多选与确认删除。离屏检查可用 `--render-ui output.png instance dark 1080 700 screenshots`，末尾追加 `preview` 或 `delete` 可检查对应弹窗，均不会实际删除文件或写入剪贴板。
+
+资源包管理支持后台读取 ZIP / 文件夹的图标、描述和兼容性、本地搜索、ZIP 导入及单个／批量启用禁用；不兼容包启用前弹窗确认。它修改隔离或共享游戏目录的 `options.txt`，保留其他设置、已有资源包顺序和未知内容；游戏运行期间暂不允许修改。
+
+命令行可用 `--resourcepack-list`、`--resourcepack-import <ZIP>`、`--resourcepack-enable <文件名>`、`--resourcepack-disable <文件名>`；启用命令是明确的修改操作，会登记不兼容包。使用 `RUST_HMCL_DATA_DIR` 可在独立数据目录验证。资源包列表与详情离屏预览使用 `--render-ui output.png instance light 1080 700 resources`，末尾可追加 `info` 或 `warning`；预览不修改游戏设置。
 
 ## 项目结构
 
@@ -20,7 +26,7 @@ rust-hmcl/
 
 ## 运行和使用
 
-运行 dist/v0.3.6/rust-hmcl.exe，或解压发行包后运行其中的 rust-hmcl.exe。
+运行 dist/v0.3.8/rust-hmcl.exe，或解压发行包后运行其中的 rust-hmcl.exe。
 
 1. 在“账户”添加或切换离线用户名。
 2. 在“下载游戏”安装正式版或快照，在“首页”选择版本并启动。
@@ -45,7 +51,7 @@ rust-hmcl/
 - 日志筛选、跟随、复制、打开文件、中文输出和结束游戏。
 - 配置迁移与备份，原生文件选择和 Windows Java 路径修复。
 
-## 0.3.6 界面还原
+## 当前界面还原
 
 图标路径直接取自 HMCL 的 SVG.java，PNG 和壁纸来自原 resources/assets/img，来源记录见 assets/hmcl/ATTRIBUTION.md。保留按钮悬停渐变、按压反馈、点击水波纹、侧栏选中动画和开关滑动；页面采用 320 ms 淡入与缓动位移，版本菜单带展开、收起和箭头旋转。动画默认开启，可在“外观”关闭“减少动画和动态效果”以恢复动效。资源内嵌在程序中，不需要联网下载。自定义窗口标题栏支持拖动、双击最大化、最小化与关闭。
 

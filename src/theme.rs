@@ -387,6 +387,7 @@ pub fn icon(ui: &egui::Ui, name: &str, rect: Rect, color: Color32) {
         "add" => include_bytes!("../assets/hmcl/icons/add.svg"),
         "search" => include_bytes!("../assets/hmcl/icons/search.svg"),
         "copy" => include_bytes!("../assets/hmcl/icons/content_copy.svg"),
+        "delete" => include_bytes!("../assets/hmcl/icons/delete_forever.svg"),
         "close" => include_bytes!("../assets/hmcl/icons/close.svg"),
         "launch" => include_bytes!("../assets/hmcl/icons/rocket_launch.svg"),
         "check" => include_bytes!("../assets/hmcl/icons/check.svg"),

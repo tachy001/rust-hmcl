@@ -32,11 +32,44 @@ pub fn run() -> Result<()> {
         return crate::preview::run(&args[1..]);
     }
     if command == "--help" {
+        println!("Local resource packs (current instance):\n  --resourcepack-list\n  --resourcepack-import <ZIP path>\n  --resourcepack-enable <file name>\n  --resourcepack-disable <file name>\nUI preview: --render-ui <PNG> instance light 1080 700 resources [info]");
         println!("Rust HMCL\n  --install <Minecraft version>\n  --fabric <installed version>\n  --quilt <installed version>\n  --java <major>\n  --launch <installed version>\n  --mod <Modrinth project ID or slug>\n  --pack <mrpack path> <new instance name>\n  --list\nEnvironment: RUST_HMCL_DATA_DIR isolates configuration, Java and game files.");
         return Ok(());
     }
     let mut config = Config::load()?;
     config.normalize();
+    if command.starts_with("--resourcepack-") {
+        let context = crate::resourcepacks::ContextInfo::from_config(&config)?;
+        match command.as_str() {
+            "--resourcepack-list" => {
+                for pack in crate::resourcepacks::list(&context)? {
+                    println!(
+                        "{} · {} · {}",
+                        pack.name,
+                        if pack.enabled {
+                            "已启用"
+                        } else {
+                            "未启用"
+                        },
+                        pack.compatibility.warning().unwrap_or("兼容")
+                    );
+                }
+            }
+            "--resourcepack-import" => crate::resourcepacks::import(
+                &context,
+                std::path::Path::new(args.get(1).context("需要 ZIP 文件路径")?),
+            )?,
+            "--resourcepack-enable" | "--resourcepack-disable" => {
+                crate::resourcepacks::set_enabled(
+                    &context,
+                    &[args.get(1).context("需要资源包文件名")?.clone()],
+                    command == "--resourcepack-enable",
+                )?
+            }
+            _ => bail!("未知资源包命令"),
+        }
+        return Ok(());
+    }
     if command == "--duplicate" || command == "--rename" {
         let old = args.get(1).context("需要原实例名称")?;
         let new = args.get(2).context("需要新实例名称")?;

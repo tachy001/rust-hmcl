@@ -13,7 +13,11 @@ mod metadata;
 mod modpack;
 mod modrinth;
 mod mods;
+mod motion;
 mod preview;
+mod resourcepack_ui;
+mod resourcepacks;
+mod screenshots;
 mod theme;
 
 use config::Config;
@@ -178,13 +182,15 @@ struct Launcher {
     edit_settings: config::VersionSettings,
     editing_error: String,
     instance_tab: instance_ui::Tab,
-    instance_tab_started: f64,
+    instance_transition: motion::TabTransition,
     instance_return_page: Page,
     runtimes: Vec<java_runtime::Runtime>,
     java_loaded: bool,
     instance_operation: Option<(String, bool, String)>,
     instance_name: String,
     instance_operation_error: String,
+    screenshots: screenshots::Browser,
+    resourcepacks: resourcepack_ui::Browser,
 }
 impl Launcher {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
@@ -295,13 +301,15 @@ impl Launcher {
             edit_settings,
             editing_error: String::new(),
             instance_tab: instance_ui::Tab::Settings,
-            instance_tab_started: -1.,
+            instance_transition: motion::TabTransition::default(),
             instance_return_page: Page::Home,
             runtimes: vec![],
             java_loaded: false,
             instance_operation: None,
             instance_name: String::new(),
             instance_operation_error: String::new(),
+            screenshots: screenshots::Browser::default(),
+            resourcepacks: resourcepack_ui::Browser::default(),
         }
     }
     fn refresh(&mut self) {
@@ -1328,7 +1336,7 @@ impl Launcher {
                     .unwrap_or_default();
                 self.editing_version = Some(id.into());
                 self.instance_tab = instance_ui::Tab::Settings;
-                self.instance_tab_started = -1.;
+                self.instance_transition = motion::TabTransition::default();
                 self.page = Page::Instance;
             }
             VersionAction::Favorite => {
@@ -1888,12 +1896,36 @@ impl Launcher {
                     },
                 );
             });
-        let operation_open = self.instance_operation.is_some();
+        let operation_open = self.instance_operation.is_some()
+            || self.screenshots.modal_open()
+            || self.resourcepacks.modal_open();
         self.instance_operation_dialog(ctx);
+        self.resourcepacks.dialogs(ctx, self.busy || self.running);
+        if let Some(path) = self.screenshots.dialogs(ctx, self.busy) {
+            match appearance::Wallpaper::load(&path) {
+                Ok(wallpaper) => {
+                    let mut candidate = self.config.clone();
+                    candidate.wallpaper = path.to_string_lossy().into();
+                    match candidate.save() {
+                        Ok(()) => {
+                            if let Some(old) = self.wallpaper.take() {
+                                ctx.forget_image(&old.uri);
+                            }
+                            self.wallpaper = Some(wallpaper);
+                            self.config = candidate;
+                        }
+                        Err(error) => self.screenshots.error = error.to_string(),
+                    }
+                }
+                Err(error) => self.screenshots.error = error.to_string(),
+            }
+        }
         if self.page == Page::Home
             && !self.busy
             && !self.version_popup
             && self.instance_operation.is_none()
+            && !self.screenshots.modal_open()
+            && !self.resourcepacks.modal_open()
             && !operation_open
             && !ctx.wants_keyboard_input()
             && ctx.input(|i| i.key_pressed(egui::Key::Enter))

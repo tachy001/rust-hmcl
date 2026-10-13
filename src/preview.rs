@@ -60,7 +60,17 @@ pub fn run(args: &[String]) -> Result<()> {
     if tab.is_some() && page != crate::Page::Instance {
         bail!("仅 instance 页面支持指定分页");
     }
-    let image = render(config, width, height, tab, operation)?;
+    let screenshot_dialog = args.get(6).map(String::as_str);
+    if screenshot_dialog.is_some()
+        && (page != crate::Page::Instance
+            || !matches!(
+                tab,
+                Some(crate::instance_ui::Tab::Screenshots | crate::instance_ui::Tab::Resources)
+            ))
+    {
+        bail!("内容弹窗预览仅支持 instance 页的 screenshots 或 resources 分页");
+    }
+    let image = render(config, width, height, tab, operation, screenshot_dialog)?;
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent)?;
     }
@@ -75,6 +85,7 @@ fn render(
     height: u32,
     tab: Option<crate::instance_ui::Tab>,
     operation: Option<bool>,
+    screenshot_dialog: Option<&str>,
 ) -> Result<image::RgbaImage> {
     let page = crate::Page::from_key(&config.start_page);
     let ctx = egui::Context::default();
@@ -103,6 +114,23 @@ fn render(
     }
     if let Some(tab) = tab {
         launcher.instance_tab = tab;
+        if tab == crate::instance_ui::Tab::Resources {
+            launcher
+                .resourcepacks
+                .prepare_preview(&launcher.config, &ctx)?;
+            if let Some(mode) = screenshot_dialog {
+                launcher.resourcepacks.prepare_dialog_preview(mode)?;
+            }
+        }
+        if tab == crate::instance_ui::Tab::Screenshots {
+            launcher.screenshots.prepare_preview(
+                crate::game::instance_dir(&launcher.config)?.join("screenshots"),
+                &ctx,
+            )?;
+            if let Some(mode) = screenshot_dialog {
+                launcher.screenshots.prepare_dialog_preview(mode, &ctx)?;
+            }
+        }
     }
     if page == crate::Page::Mods {
         launcher.refresh_mods();
@@ -324,7 +352,7 @@ mod tests {
                 dark_mode: dark,
                 ..Default::default()
             };
-            let image = render(config, 800, 490, None, None).unwrap();
+            let image = render(config, 800, 490, None, None, None).unwrap();
             let expected = if dark { [49, 61, 113] } else { [222, 225, 255] };
             assert_eq!(&image.get_pixel(600, 10).0[..3], &expected);
             // The center page is almost opaque, unlike the wallpaper Area bug.
