@@ -109,6 +109,74 @@ mod tests {
             fs::read(version.join("game/resourcepacks/valid.zip")).unwrap()
         );
         assert!(!version.join("game/resourcepacks/bad.zip").exists());
+        let mut draw = |time, events| {
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(800., 500.),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| browser.page(ui, &config, false));
+                },
+            )
+        };
+        draw(1., vec![]);
+        let output = draw(1.1, vec![]);
+        let title = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::epaint::Shape::Text(text) if text.galley.job.text == "folder-resource" => {
+                    Some(text.pos)
+                }
+                _ => None,
+            })
+            .unwrap();
+        let checkbox = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::epaint::Shape::Rect(rect)
+                    if rect.rect.width() <= 24.
+                        && rect.rect.height() <= 24.
+                        && rect.rect.center().x < title.x - 40.
+                        && (rect.rect.center().y - title.y).abs() < 30. =>
+                {
+                    Some(rect.rect.center())
+                }
+                _ => None,
+            })
+            .expect("actual enable checkbox must be painted before the pack icon");
+        let pointer = |pressed| egui::Event::PointerButton {
+            pos: checkbox,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        draw(
+            1.2,
+            vec![egui::Event::PointerMoved(checkbox), pointer(true)],
+        );
+        draw(1.21, vec![pointer(false)]);
+        drop(draw);
+        assert!(
+            browser.selected.is_empty(),
+            "enable checkbox must not select the row"
+        );
+        assert_eq!(
+            browser.pending.as_ref().unwrap().1,
+            vec!["folder-resource"],
+            "missing game metadata still requires compatibility confirmation"
+        );
+        assert!(
+            !version.join("game/options.txt").exists(),
+            "confirmation must precede the options write"
+        );
         drop(browser);
         let canonical = fs::canonicalize(&root).unwrap();
         assert_eq!(
@@ -191,6 +259,223 @@ mod tests {
         assert!(browser.info.is_some(), "copying does not dismiss the modal");
     }
     #[test]
+    fn actual_rows_select_ranges_clear_with_escape_and_open_secondary_details() {
+        fn draw(
+            ctx: &egui::Context,
+            browser: &mut Browser,
+            config: &Config,
+            time: f64,
+            events: Vec<egui::Event>,
+            modifiers: egui::Modifiers,
+            enabled: bool,
+        ) -> egui::FullOutput {
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(900., 600.),
+                    )),
+                    events,
+                    modifiers,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.scope(|ui| {
+                            if !enabled {
+                                ui.disable_interaction();
+                            }
+                            browser.page(ui, config, false);
+                        });
+                    });
+                },
+            )
+        }
+        let ctx = egui::Context::default();
+        let config = Config::default();
+        let mut browser = Browser {
+            key: Some(key(&config)),
+            ..Default::default()
+        };
+        for name in ["alpha", "beta", "gamma"] {
+            browser.rows.push(Row {
+                pack: Pack {
+                    path: format!("{name}.zip").into(),
+                    name: name.into(),
+                    title: name.into(),
+                    description: "description".into(),
+                    summary: "description".into(),
+                    compatibility: Compatibility::Compatible,
+                    enabled: false,
+                    icon: None,
+                },
+                icon: None,
+            });
+        }
+        draw(
+            &ctx,
+            &mut browser,
+            &config,
+            0.,
+            vec![],
+            Default::default(),
+            true,
+        );
+        let output = draw(
+            &ctx,
+            &mut browser,
+            &config,
+            0.01,
+            vec![],
+            Default::default(),
+            true,
+        );
+        let position = |name: &str| {
+            output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::epaint::Shape::Text(text) if text.galley.job.text == name => {
+                        Some(text.pos + text.galley.size() * 0.5)
+                    }
+                    _ => None,
+                })
+                .expect("actual row title must be visible")
+        };
+        let mut time = 0.1;
+        let mut click = |browser: &mut Browser, name: &str, button, modifiers, enabled| {
+            let pos = position(name);
+            let event = |pressed| egui::Event::PointerButton {
+                pos,
+                button,
+                pressed,
+                modifiers,
+            };
+            draw(
+                &ctx,
+                browser,
+                &config,
+                time,
+                vec![egui::Event::PointerMoved(pos), event(true)],
+                modifiers,
+                enabled,
+            );
+            draw(
+                &ctx,
+                browser,
+                &config,
+                time + 0.01,
+                vec![event(false)],
+                modifiers,
+                enabled,
+            );
+            time += 0.1;
+        };
+        let ctrl = egui::Modifiers {
+            command: true,
+            ctrl: true,
+            ..Default::default()
+        };
+        let shift = egui::Modifiers {
+            shift: true,
+            ..Default::default()
+        };
+        let primary = egui::PointerButton::Primary;
+        let secondary = egui::PointerButton::Secondary;
+        click(&mut browser, "alpha", primary, Default::default(), true);
+        assert_eq!(browser.selected, BTreeSet::from(["alpha".into()]));
+        assert!(
+            browser.info.is_none(),
+            "primary click selects rather than opening details"
+        );
+        click(&mut browser, "gamma", primary, ctrl, true);
+        assert_eq!(browser.selected.len(), 2);
+        click(&mut browser, "alpha", secondary, Default::default(), true);
+        assert!(
+            browser.info.is_none(),
+            "secondary click on a multiselection must not open details"
+        );
+        click(&mut browser, "alpha", primary, Default::default(), true);
+        click(&mut browser, "gamma", primary, shift, true);
+        assert_eq!(browser.selected.len(), 3);
+        click(&mut browser, "beta", primary, Default::default(), false);
+        assert_eq!(
+            browser.selected.len(),
+            3,
+            "disabled transition content cannot change selection"
+        );
+        let escape = || egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        };
+        drop(click);
+        draw(
+            &ctx,
+            &mut browser,
+            &config,
+            1.,
+            vec![escape()],
+            Default::default(),
+            false,
+        );
+        assert_eq!(browser.selected.len(), 3);
+        draw(
+            &ctx,
+            &mut browser,
+            &config,
+            1.1,
+            vec![escape()],
+            Default::default(),
+            true,
+        );
+        assert!(browser.selected.is_empty());
+        let pos = position("beta");
+        let event = |pressed| egui::Event::PointerButton {
+            pos,
+            button: secondary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        draw(
+            &ctx,
+            &mut browser,
+            &config,
+            1.2,
+            vec![egui::Event::PointerMoved(pos), event(true)],
+            Default::default(),
+            true,
+        );
+        draw(
+            &ctx,
+            &mut browser,
+            &config,
+            1.21,
+            vec![event(false)],
+            Default::default(),
+            true,
+        );
+        assert_eq!(browser.info.as_ref().unwrap().name, "beta");
+        assert!(browser.selected.is_empty());
+        browser.selected.insert("alpha".into());
+        draw(
+            &ctx,
+            &mut browser,
+            &config,
+            1.3,
+            vec![escape()],
+            Default::default(),
+            true,
+        );
+        assert!(
+            browser.selected.contains("alpha"),
+            "a modal owns Escape while open"
+        );
+    }
+    #[test]
     fn narrow_pack_lists_keep_controls_inside_content() {
         for width in [300., 550.] {
             let ctx = egui::Context::default();
@@ -250,6 +535,7 @@ pub struct Browser {
     rows: Vec<Row>,
     rx: Option<Receiver<Scan>>,
     selected: BTreeSet<String>,
+    selection_anchor: Option<String>,
     filter: String,
     searching: bool,
     info: Option<Pack>,
@@ -291,12 +577,20 @@ impl Browser {
                     .collect();
                 self.selected
                     .retain(|name| self.rows.iter().any(|row| &row.pack.name == name));
+                if self
+                    .selection_anchor
+                    .as_ref()
+                    .is_some_and(|name| !self.rows.iter().any(|row| &row.pack.name == name))
+                {
+                    self.selection_anchor = None;
+                }
                 self.error = warning;
             }
             Err(error) => {
                 self.context = None;
                 self.rows.clear();
                 self.selected.clear();
+                self.selection_anchor = None;
                 self.error = error;
             }
         }
@@ -393,6 +687,7 @@ impl Browser {
             self.rows.clear();
             self.context = None;
             self.selected.clear();
+            self.selection_anchor = None;
             self.info = None;
             self.pending = None;
             self.refresh(config, ui.ctx(), None);
@@ -430,8 +725,20 @@ impl Browser {
                 self.error = "请等待当前任务结束后再导入资源包".into();
             }
         }
-        let ready = self.rx.is_none() && !blocked && ui.is_enabled();
+        let interactive = ui.is_enabled() && !self.modal_open();
+        if interactive
+            && !self.selected.is_empty()
+            && ui.input_mut(|input| input.consume_key(input.modifiers, egui::Key::Escape))
+        {
+            self.selected.clear();
+            self.selection_anchor = None;
+        }
+        // The parent transition already blocks input. Do not turn that gate
+        // into an explicit disabled appearance for otherwise available actions.
+        let ready = self.rx.is_none() && !blocked && ui.is_visually_enabled() && !self.modal_open();
         let mut change = None;
+        let mut clicked = None;
+        let mut secondary = None;
         ui.horizontal_wrapped(|ui| {
             if self.selected.is_empty() {
                 if ui
@@ -504,6 +811,7 @@ impl Browser {
                 }
                 if theme::button(ui, "取消选择").clicked() {
                     self.selected.clear();
+                    self.selection_anchor = None;
                 }
             }
             if theme::button(ui, "全选").clicked() {
@@ -564,77 +872,102 @@ impl Browser {
                     .corner_radius(4.)
                     .inner_margin(8.)
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            let mut selected = self.selected.contains(&row.pack.name);
-                            if ui.checkbox(&mut selected, "").changed() {
-                                if selected {
-                                    self.selected.insert(row.pack.name.clone());
-                                } else {
-                                    self.selected.remove(&row.pack.name);
-                                }
-                            }
-                            let (rect, response) =
-                                ui.allocate_exact_size(egui::vec2(40., 40.), egui::Sense::click());
-                            if let Some(icon) = &row.icon {
-                                egui::Image::new(icon).paint_at(ui, rect);
-                            } else {
-                                theme::icon(ui, "texture", rect, theme::accent(ui));
-                            }
-                            if response.clicked() {
-                                self.info = Some(row.pack.clone());
-                            }
-                            ui.vertical(|ui| {
-                                // Toggle is 58px, info is 38px, plus two 12px gaps.
-                                ui.set_width((ui.available_width() - 130.).max(20.));
-                                if ui
-                                    .add(
-                                        egui::Label::new(&row.pack.title)
-                                            .truncate()
-                                            .sense(egui::Sense::click()),
-                                    )
-                                    .double_clicked()
-                                {
-                                    self.info = Some(row.pack.clone());
-                                }
-                                ui.add(
-                                    egui::Label::new(
-                                        RichText::new(&row.pack.summary)
-                                            .small()
-                                            .color(ui.visuals().weak_text_color()),
-                                    )
-                                    .truncate(),
-                                );
-                                if let Some(warning) = row.pack.compatibility.warning() {
-                                    ui.add(
-                                        egui::Label::new(RichText::new(warning).small().color(
-                                            if ui.visuals().dark_mode {
-                                                egui::Color32::from_rgb(255, 202, 135)
-                                            } else {
-                                                egui::Color32::from_rgb(142, 82, 8)
-                                            },
-                                        ))
-                                        .truncate(),
+                        let content = ui.scope_builder(
+                            egui::UiBuilder::new().sense(egui::Sense::click()),
+                            |ui| {
+                                ui.horizontal(|ui| {
+                                    let mut enabled = row.pack.enabled;
+                                    if ui
+                                        .add_enabled_ui(ready, |ui| {
+                                            theme::checkbox(ui, &mut enabled, "")
+                                        })
+                                        .inner
+                                        .on_hover_text("启用／禁用资源包")
+                                        .changed()
+                                    {
+                                        change = Some((vec![row.pack.name.clone()], enabled));
+                                    }
+                                    let (rect, _) = ui.allocate_exact_size(
+                                        egui::vec2(32., 32.),
+                                        egui::Sense::hover(),
                                     );
-                                }
-                            });
-                            let mut enabled = row.pack.enabled;
-                            if ui
-                                .add_enabled_ui(ready, |ui| theme::toggle(ui, &mut enabled, ""))
-                                .inner
-                                .changed()
-                            {
-                                change = Some((vec![row.pack.name.clone()], enabled));
-                            }
-                            if ui
-                                .add(theme::MaterialButton::new("").icon("info"))
-                                .on_hover_text("资源包详情")
-                                .clicked()
-                            {
-                                self.info = Some(row.pack.clone());
-                            }
-                        });
+                                    if let Some(icon) = &row.icon {
+                                        egui::Image::new(icon).paint_at(ui, rect);
+                                    } else {
+                                        theme::icon(ui, "texture", rect, theme::accent(ui));
+                                    }
+                                    ui.vertical(|ui| {
+                                        // Details button plus spacing; selection belongs to the row.
+                                        ui.set_width((ui.available_width() - 50.).max(20.));
+                                        ui.add(
+                                            egui::Label::new(&row.pack.title)
+                                                .selectable(false)
+                                                .truncate(),
+                                        );
+                                        ui.add(
+                                            egui::Label::new(
+                                                RichText::new(&row.pack.summary)
+                                                    .small()
+                                                    .color(ui.visuals().weak_text_color()),
+                                            )
+                                            .selectable(false)
+                                            .truncate(),
+                                        );
+                                        if let Some(warning) = row.pack.compatibility.warning() {
+                                            ui.add(
+                                                egui::Label::new(
+                                                    RichText::new(warning).small().color(
+                                                        if ui.visuals().dark_mode {
+                                                            egui::Color32::from_rgb(255, 202, 135)
+                                                        } else {
+                                                            egui::Color32::from_rgb(142, 82, 8)
+                                                        },
+                                                    ),
+                                                )
+                                                .selectable(false)
+                                                .truncate(),
+                                            );
+                                        }
+                                    });
+                                    if ui
+                                        .add(theme::MaterialButton::new("").icon("info"))
+                                        .on_hover_text("资源包详情")
+                                        .clicked()
+                                    {
+                                        self.info = Some(row.pack.clone());
+                                    }
+                                });
+                            },
+                        );
+                        if interactive && content.response.clicked() {
+                            clicked = Some(row.pack.name.clone());
+                        }
+                        if interactive && content.response.secondary_clicked() {
+                            secondary = Some(row.pack.clone());
+                        }
                     });
             });
+        }
+        if let Some(name) = clicked {
+            let visible: Vec<_> = self
+                .rows
+                .iter()
+                .filter(|row| self.matches(&row.pack))
+                .map(|row| row.pack.name.clone())
+                .collect();
+            self.select(&visible, &name, ui.input(|input| input.modifiers));
+        }
+        if let Some(pack) = secondary {
+            if !self.selected.contains(&pack.name) {
+                self.selected.clear();
+                self.selected.insert(pack.name.clone());
+                self.selection_anchor = Some(pack.name.clone());
+            }
+            if self.selected.len() == 1 {
+                self.selected.clear();
+                self.selection_anchor = None;
+                self.info = Some(pack);
+            }
         }
         if let Some((names, enabled)) = change {
             self.change(config, names, enabled, ui.ctx());
@@ -642,6 +975,35 @@ impl Browser {
         if !self.error.is_empty() {
             ui.label(&self.error);
         }
+    }
+    fn select(&mut self, visible: &[String], name: &str, modifiers: egui::Modifiers) {
+        if modifiers.shift {
+            let anchor = self
+                .selection_anchor
+                .as_ref()
+                .and_then(|anchor| visible.iter().position(|name| name == anchor));
+            let target = visible.iter().position(|item| item == name);
+            if let (Some(anchor), Some(target)) = (anchor, target) {
+                if !modifiers.command {
+                    self.selected.clear();
+                }
+                self.selected.extend(
+                    visible[anchor.min(target)..=anchor.max(target)]
+                        .iter()
+                        .cloned(),
+                );
+                return;
+            }
+        }
+        if modifiers.command {
+            if !self.selected.remove(name) {
+                self.selected.insert(name.into());
+            }
+        } else {
+            self.selected.clear();
+            self.selected.insert(name.into());
+        }
+        self.selection_anchor = Some(name.into());
     }
     fn matches(&self, pack: &Pack) -> bool {
         let filter = self.filter.to_lowercase();

@@ -1004,6 +1004,29 @@ pub fn nav(
     }
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
+pub fn checkbox(ui: &mut egui::Ui, value: &mut bool, label: &str) -> Response {
+    ui.scope(|ui| {
+        let color = accent(ui);
+        let outline = border(ui);
+        let checked = *value;
+        let visuals = ui.visuals_mut();
+        for widget in [
+            &mut visuals.widgets.inactive,
+            &mut visuals.widgets.hovered,
+            &mut visuals.widgets.active,
+            &mut visuals.widgets.noninteractive,
+        ] {
+            widget.corner_radius = egui::CornerRadius::same(2);
+            widget.bg_fill = if checked { color } else { Color32::TRANSPARENT };
+            widget.bg_stroke = egui::Stroke::new(2_f32, if checked { color } else { outline });
+            if checked {
+                widget.fg_stroke = egui::Stroke::new(2_f32, Color32::WHITE);
+            }
+        }
+        ui.checkbox(value, label)
+    })
+    .inner
+}
 pub fn toggle(ui: &mut egui::Ui, value: &mut bool, label: &str) -> Response {
     let text = ui.painter().layout_no_wrap(
         label.to_owned(),
