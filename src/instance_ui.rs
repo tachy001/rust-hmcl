@@ -203,6 +203,22 @@ impl Launcher {
                     .small()
                     .color(ui.visuals().weak_text_color()),
             );
+            let mut own = self.edit_settings.fullscreen.is_some();
+            if theme::toggle(ui, &mut own, "单独设置窗口模式").changed() {
+                self.edit_settings.fullscreen = own.then_some(self.config.fullscreen);
+            }
+            if let Some(fullscreen) = &mut self.edit_settings.fullscreen {
+                ui.horizontal(|ui| {
+                    ui.radio_value(fullscreen, false, "窗口");
+                    ui.radio_value(fullscreen, true, "全屏");
+                });
+            } else {
+                ui.label(if self.config.fullscreen {
+                    "继承全局模式：全屏"
+                } else {
+                    "继承全局模式：窗口"
+                });
+            }
             let mut own = self.edit_settings.width.is_some() || self.edit_settings.height.is_some();
             if theme::toggle(ui, &mut own, "单独设置游戏窗口尺寸").changed() {
                 self.edit_settings.width = own.then_some(self.config.width);

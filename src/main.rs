@@ -1100,6 +1100,11 @@ impl Launcher {
                 ui.label("额外 JVM 参数（支持带引号的参数）");
                 theme::text_field(ui, &mut self.config.extra_jvm);
                 theme::toggle(ui, &mut self.config.auto_java, "自动下载游戏所需 Java");
+                ui.label("游戏窗口模式");
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut self.config.fullscreen, false, "窗口");
+                    ui.radio_value(&mut self.config.fullscreen, true, "全屏");
+                });
                 ui.horizontal(|ui| {
                     ui.label("窗口宽度");
                     ui.add(egui::DragValue::new(&mut self.config.width).range(320..=7680));

@@ -713,6 +713,7 @@ fn launch_args(
         args.extend(["-cp".into(), cp]);
     }
     args.push(str_field(meta, "mainClass")?.into());
+    let game_args_start = args.len();
     if meta["arguments"]["game"].is_array() {
         args.extend(argument_list(&meta["arguments"]["game"], &vars)?);
     } else {
@@ -726,7 +727,33 @@ fn launch_args(
             config.height.to_string(),
         ]);
     }
+    if config.fullscreen
+        && !args[game_args_start..]
+            .iter()
+            .any(|arg| arg == "--fullscreen")
+    {
+        args.push("--fullscreen".into());
+    }
     Ok(args)
+}
+/// Read the same argument plan used by launch, without Java, downloads or writes.
+pub fn launch_plan(config: &crate::config::Config) -> Result<Vec<String>> {
+    let mut effective = config.for_selected();
+    effective.validate()?;
+    effective.game_dir =
+        java_compatible_path(fs::canonicalize(&effective.game_dir).context("游戏目录不存在")?)
+            .to_string_lossy()
+            .into_owned();
+    let root = Path::new(&effective.game_dir);
+    let dir = version_dir(root, &effective.selected)?;
+    let metadata = crate::metadata::resolve(root, &effective.selected)?;
+    launch_args(
+        &effective,
+        root,
+        &instance_dir(&effective)?,
+        &dir,
+        &metadata,
+    )
 }
 pub fn java_major(path: &Path) -> Result<u32> {
     Ok(crate::java_runtime::probe(path)?.major)
@@ -835,6 +862,56 @@ impl Worker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fullscreen_flag_reaches_modern_and_legacy_game_arguments_once() {
+        let root = Path::new("launch-plan-fixture");
+        let dir = root.join("versions/custom");
+        let game = root.join("game");
+        let mut config = crate::Config {
+            selected: "custom".into(),
+            fullscreen: true,
+            ..Default::default()
+        };
+        let modern = json!({"mainClass":"net.minecraft.client.main.Main","libraries":[],"arguments":{"jvm":["-cp","${classpath}"],"game":["--username","${auth_player_name}",{"rules":[{"action":"allow","features":{"has_custom_resolution":true}}],"value":["--width","${resolution_width}","--height","${resolution_height}"]}]}});
+        let legacy = json!({"mainClass":"net.minecraft.client.main.Main","libraries":[],"minecraftArguments":"--username ${auth_player_name}"});
+        for meta in [&modern, &legacy] {
+            let args = launch_args(&config, root, &game, &dir, meta).unwrap();
+            let main = args
+                .iter()
+                .position(|v| v == "net.minecraft.client.main.Main")
+                .unwrap();
+            assert_eq!(args.iter().filter(|v| *v == "--fullscreen").count(), 1);
+            assert!(args[main + 1..].contains(&"--fullscreen".into()));
+            assert!(args.windows(2).any(|v| v == ["--width", "854"]));
+        }
+        let declared = json!({"mainClass":"net.minecraft.client.main.Main","libraries":[],"arguments":{"jvm":["-cp","${classpath}"],"game":["--fullscreen"]}});
+        assert_eq!(
+            launch_args(&config, root, &game, &dir, &declared)
+                .unwrap()
+                .iter()
+                .filter(|v| *v == "--fullscreen")
+                .count(),
+            1
+        );
+        config.fullscreen = false;
+        assert!(!launch_args(&config, root, &game, &dir, &modern)
+            .unwrap()
+            .iter()
+            .any(|v| v == "--fullscreen"));
+        config.version_settings.insert(
+            "custom".into(),
+            crate::config::VersionSettings {
+                fullscreen: Some(true),
+                ..Default::default()
+            },
+        );
+        assert!(
+            launch_args(&config.for_selected(), root, &game, &dir, &modern)
+                .unwrap()
+                .iter()
+                .any(|v| v == "--fullscreen")
+        );
+    }
     use serde_json::json;
     #[test]
     fn windows_verbatim_paths_are_removed_for_java() {

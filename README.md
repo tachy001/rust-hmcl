@@ -1,4 +1,4 @@
-# Rust HMCL 0.3.10
+# Rust HMCL 0.3.11
 
 参考 HMCL 的 Rust 原生桌面启动器。当前目录是独立的 Rust 项目根目录；本机参考用的原 Java 源码保留在相邻的 `../HMCL-main/`。启动器无需 Java 或 WebView，Minecraft 仍由单独的 Java 进程运行。
 
@@ -26,7 +26,9 @@ rust-hmcl/
 
 ## 运行和使用
 
-运行 dist/v0.3.10/rust-hmcl.exe，或解压发行包后运行其中的 rust-hmcl.exe。Windows 主窗口外沿为 12 个逻辑像素圆角，随原生 DPI 与尺寸更新，最大化时取消裁剪；Linux/macOS 外沿圆角仍待实现和验证。
+运行 dist/v0.3.11/rust-hmcl.exe，或解压发行包后运行其中的 rust-hmcl.exe。Windows 主窗口外沿为 12 个逻辑像素圆角，随原生 DPI 与尺寸更新，最大化时取消裁剪；Linux/macOS 外沿圆角仍待实现和验证。
+
+全局设置和实例“游戏设置”支持窗口／全屏模式；实例可继承全局，也可单独覆盖。全屏会按原 HMCL 在游戏参数末尾添加 `--fullscreen`，保留窗口尺寸配置；最大化游戏窗口模式仍待实现。`--launch-plan <已安装实例>` 可只读输出实际 Java 参数计划，采用相同的配置继承和元数据解析，不启动 Java、下载文件或保存设置。
 
 1. 在“账户”添加或切换离线用户名。
 2. 在“下载游戏”安装正式版或快照，在“首页”选择版本并启动。

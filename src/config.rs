@@ -10,6 +10,7 @@ pub struct VersionSettings {
     pub extra_jvm: Option<String>,
     pub width: Option<u32>,
     pub height: Option<u32>,
+    pub fullscreen: Option<bool>,
     pub isolated: Option<bool>,
     pub auto_java: Option<bool>,
 }
@@ -27,6 +28,7 @@ pub struct Config {
     pub isolated: bool,
     pub width: u32,
     pub height: u32,
+    pub fullscreen: bool,
     pub accounts: Vec<String>,
     pub directories: Vec<String>,
     pub download_threads: usize,
@@ -54,6 +56,7 @@ impl Default for Config {
             isolated: true,
             width: 854,
             height: 480,
+            fullscreen: false,
             accounts: vec![],
             directories: vec![],
             download_threads: 8,
@@ -181,6 +184,9 @@ impl Config {
             if let Some(height) = settings.height {
                 config.height = height;
             }
+            if let Some(fullscreen) = settings.fullscreen {
+                config.fullscreen = fullscreen;
+            }
             if let Some(isolated) = settings.isolated {
                 config.isolated = isolated;
             }
@@ -221,6 +227,33 @@ pub fn validate_player(player: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fullscreen_inherits_and_explicit_windowed_override_survives_migration() {
+        let mut config: Config = serde_json::from_str(
+            r#"{"selected":"custom","version_settings":{"custom":{"memory":4096}}}"#,
+        )
+        .unwrap();
+        assert!(!config.fullscreen);
+        assert_eq!(config.version_settings["custom"].fullscreen, None);
+        config.fullscreen = true;
+        assert!(config.for_selected().fullscreen);
+        config
+            .version_settings
+            .get_mut("custom")
+            .unwrap()
+            .fullscreen = Some(false);
+        let restored: Config =
+            serde_json::from_slice(&serde_json::to_vec(&config).unwrap()).unwrap();
+        assert!(restored.fullscreen);
+        assert!(!restored.for_selected().fullscreen);
+        config.remap_instance("custom", "copy", false);
+        assert_eq!(config.version_settings["copy"].fullscreen, Some(false));
+        config.version_settings.get_mut("copy").unwrap().fullscreen = Some(true);
+        assert!(config.for_selected().fullscreen);
+        assert_eq!(config.version_settings["custom"].fullscreen, Some(false));
+        config.version_settings.get_mut("copy").unwrap().fullscreen = None;
+        assert!(config.for_selected().fullscreen);
+    }
     #[test]
     fn per_version_settings_do_not_change_global_defaults() {
         let mut config = Config {
