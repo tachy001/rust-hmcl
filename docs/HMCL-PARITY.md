@@ -35,6 +35,10 @@
 
 0.3.9 已接入实例分页的旧内容快照退出、400 ms 原版强调曲线和视口高度 20% 上滑；内存绘制快照不会重跑旧页操作，纹理保留与释放已通过测试。连续帧、过渡控件颜色与实际窗口仍待核验。
 
+0.3.10 加入 --render-motion，通过实际 Launcher.draw 输出设置→组件分页的连续帧，并修正 400 ms 浮点边界。内存 UI 输入测试核验过渡期间的鼠标／键盘拦截、期限结束恢复点击与减少动画立即交互。连续离屏帧已经暴露控件额外灰化，仍需修正并与原版逐帧比对；不能因曲线测试通过就宣称完整动效还原。
+
+最终 0.3.10 的 48 项本地测试通过，4 项联网测试跳过；`dist/previews/tab-motion-fixed-light/`、`tab-motion-fixed-dark/`、`tab-motion-fixed-reduced/` 保存实际 0～500 ms 连续帧。查看浅色 400 ms 帧确认恢复正常交互样式；减少动画 0 ms 帧直接显示新内容。`../.tools/resourcepack-proof/motion-proof-0.3.10.json` 记录配置与 options.txt 的 SHA-256 未变。整个核验不调用 App.update 的原生窗口路径，也不触及用户桌面。
+
 Windows 主窗口新增原生圆角区域，12 个逻辑像素半径，按原生 DPI 与窗口尺寸更新，最大化取消区域。隐藏窗口实际 API 测试已核验角点排除、中心与边缘保留、不同尺寸／DPI 和区域清除。参考：[SetWindowRgn](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowrgn)、[CreateRoundRectRgn](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-createroundrectrgn)。离屏软件预览不经过原生窗口裁剪，因此不能用矩形 PNG 判断这项效果；Linux/macOS 外沿圆角仍待实现及真机验证。
 
 | 领域 | 待完成内容 | 验收依据 |

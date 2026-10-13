@@ -108,7 +108,14 @@ impl TabTransition {
             1.
         } else {
             self.started
-                .map(|start| ((now - start) / 0.4).clamp(0., 1.))
+                .map(|start| {
+                    let elapsed = now - start;
+                    if elapsed >= 0.4 - 1e-9 {
+                        1.
+                    } else {
+                        (elapsed / 0.4).clamp(0., 1.)
+                    }
+                })
                 .unwrap_or(1.)
         };
         if progress >= 1. {
@@ -169,10 +176,13 @@ impl TabTransition {
             }
         }
         ctx.graphics_mut(|graphics| {
-            let list = graphics.entry(frame.layer);
-            for index in frame.start.0..end.0 {
-                list.reset_shape(ShapeIdx(index));
+            {
+                let list = graphics.entry(frame.layer);
+                for index in frame.start.0..end.0 {
+                    list.reset_shape(ShapeIdx(index));
+                }
             }
+            let list = graphics.entry(frame.layer);
             for shape in visible {
                 list.add(shape.clip_rect, shape.shape);
             }
@@ -225,18 +235,22 @@ mod tests {
                 |ctx| {
                     egui::CentralPanel::default().show(ctx, |ui| {
                         let frame = animation.begin(ui, key.into(), false);
-                        let rect =
-                            egui::Rect::from_min_size(ui.min_rect().min, egui::vec2(100., 100.));
-                        if key == "old" {
-                            ui.painter().image(
-                                id,
-                                rect,
-                                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
-                                egui::Color32::WHITE,
+                        ui.add_enabled_ui(frame.interactive(), |ui| {
+                            let rect = egui::Rect::from_min_size(
+                                ui.min_rect().min,
+                                egui::vec2(100., 100.),
                             );
-                        } else {
-                            ui.painter().rect_filled(rect, 0., egui::Color32::BLUE);
-                        }
+                            if key == "old" {
+                                ui.painter().image(
+                                    id,
+                                    rect,
+                                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
+                                    egui::Color32::WHITE,
+                                );
+                            } else {
+                                ui.painter().rect_filled(rect, 0., egui::Color32::BLUE);
+                            }
+                        });
                         animation.finish(ui, frame);
                     });
                 },
@@ -249,5 +263,85 @@ mod tests {
         assert!(ctx.tex_manager().read().meta(id).is_some());
         draw(1.5, "new");
         assert!(ctx.tex_manager().read().meta(id).is_none());
+    }
+    #[test]
+    fn moving_content_rejects_input_and_finishes_at_exact_deadline() {
+        let ctx = egui::Context::default();
+        let mut motion = TabTransition::default();
+        let mut button = egui::Id::NULL;
+        let mut position = egui::Pos2::ZERO;
+        let mut draw = |time, key: &str, events: Vec<egui::Event>, reduced| {
+            let mut clicked = false;
+            let mut interactive = false;
+            let _ = ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(400., 300.),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        let frame = motion.begin(ui, key.into(), reduced);
+                        interactive = frame.interactive();
+                        ui.add_enabled_ui(interactive, |ui| {
+                            assert_eq!(ui.is_enabled(), interactive);
+                            let response = ui.add(crate::theme::MaterialButton::new("Action"));
+                            button = response.id;
+                            position = response.rect.center();
+                            clicked = response.clicked();
+                        });
+                        motion.finish(ui, frame);
+                    });
+                },
+            );
+            (clicked, interactive, button, position)
+        };
+        let (_, _, id, pos) = draw(0., "old", vec![], false);
+        ctx.memory_mut(|memory| memory.request_focus(id));
+        let key = egui::Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        };
+        assert!(!draw(1., "new", vec![key.clone()], false).0);
+        let pointer = |pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        assert!(
+            !draw(
+                1.04,
+                "new",
+                vec![egui::Event::PointerMoved(pos), pointer(true)],
+                false
+            )
+            .0
+        );
+        assert!(!draw(1.08, "new", vec![pointer(false)], false).0);
+        assert!(
+            draw(1.4, "new", vec![], false).1,
+            "exactly 400ms must finish"
+        );
+        draw(
+            1.41,
+            "new",
+            vec![egui::Event::PointerMoved(pos), pointer(true)],
+            false,
+        );
+        assert!(draw(1.42, "new", vec![pointer(false)], false).0);
+        let (_, _, id, _) = draw(2., "another", vec![], true);
+        ctx.memory_mut(|memory| memory.request_focus(id));
+        assert!(
+            draw(2.01, "another", vec![key], true).0,
+            "reduced motion must remain interactive"
+        );
     }
 }

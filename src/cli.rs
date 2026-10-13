@@ -31,6 +31,9 @@ pub fn run() -> Result<()> {
     if command == "--render-ui" {
         return crate::preview::run(&args[1..]);
     }
+    if command == "--render-motion" {
+        return crate::preview::motion(&args[1..]);
+    }
     if command == "--help" {
         println!("Local resource packs (current instance):\n  --resourcepack-list\n  --resourcepack-import <ZIP path>\n  --resourcepack-enable <file name>\n  --resourcepack-disable <file name>\nUI preview: --render-ui <PNG> instance light 1080 700 resources [info]");
         println!("Rust HMCL\n  --install <Minecraft version>\n  --fabric <installed version>\n  --quilt <installed version>\n  --java <major>\n  --launch <installed version>\n  --mod <Modrinth project ID or slug>\n  --pack <mrpack path> <new instance name>\n  --list\nEnvironment: RUST_HMCL_DATA_DIR isolates configuration, Java and game files.");

@@ -14,6 +14,132 @@ struct Texture {
     nearest: bool,
 }
 
+pub fn motion(args: &[String]) -> Result<()> {
+    let path = Path::new(
+        args.first()
+            .context("用法：--render-motion <输出目录> [light|dark] [normal|reduced] [宽] [高]")?,
+    );
+    if path.exists() && std::fs::read_dir(path)?.next().is_some() {
+        bail!("动画预览输出目录必须为空，避免覆盖已有文件");
+    }
+    let mut config = crate::Config::load()?;
+    config.start_page = "instance".into();
+    config.dark_mode = match args.get(1).map(String::as_str).unwrap_or("light") {
+        "light" => false,
+        "dark" => true,
+        _ => bail!("主题应为 light 或 dark"),
+    };
+    config.reduce_motion = match args.get(2).map(String::as_str).unwrap_or("normal") {
+        "normal" => false,
+        "reduced" => true,
+        _ => bail!("动画模式应为 normal 或 reduced"),
+    };
+    let width = args
+        .get(3)
+        .map(|v| v.parse::<u32>())
+        .transpose()?
+        .unwrap_or(1080);
+    let height = args
+        .get(4)
+        .map(|v| v.parse::<u32>())
+        .transpose()?
+        .unwrap_or(700);
+    if !(800..=2560).contains(&width) || !(490..=1440).contains(&height) {
+        bail!("预览尺寸超出支持范围");
+    }
+    let ctx = egui::Context::default();
+    let mut launcher = crate::Launcher::with_config(&ctx, config, String::new());
+    if !launcher.installed.contains(&launcher.config.selected) {
+        bail!("实例分页动画预览需要选择已安装实例");
+    }
+    let mut renderer = SoftwareFrames::default();
+    for time in [0., 0.2, 0.6, 0.8] {
+        renderer.draw(&ctx, &mut launcher, time, width, height)?;
+    }
+    std::fs::create_dir_all(path)?;
+    let before = renderer.draw(&ctx, &mut launcher, 0.9, width, height)?;
+    before.save(path.join("before.png"))?;
+    launcher.instance_tab = crate::instance_ui::Tab::Components;
+    for ms in [0, 40, 80, 160, 240, 400, 500] {
+        renderer
+            .draw(&ctx, &mut launcher, 1. + ms as f64 / 1000., width, height)?
+            .save(path.join(format!("frame-{ms:03}ms.png")))?;
+    }
+    std::fs::write(path.join("README.txt"),"Actual egui instance page, Settings -> Components. Independent offscreen frames; no desktop capture, OS input, Java, installation or config save. before.png precedes the tab change; frame timestamps are measured from the change. Native window corner clipping is not part of these frames.\n")?;
+    println!("实际分页动画离屏帧：{}", path.display());
+    Ok(())
+}
+
+#[derive(Default)]
+struct SoftwareFrames {
+    textures: HashMap<TextureId, Texture>,
+}
+impl SoftwareFrames {
+    fn draw(
+        &mut self,
+        ctx: &egui::Context,
+        launcher: &mut crate::Launcher,
+        time: f64,
+        width: u32,
+        height: u32,
+    ) -> Result<image::RgbaImage> {
+        let output = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(width as f32, height as f32),
+                )),
+                time: Some(time),
+                ..Default::default()
+            },
+            |ctx| launcher.draw(ctx),
+        );
+        for (id, delta) in output.textures_delta.set {
+            let size = delta.image.size();
+            let nearest = delta.options.magnification == egui::TextureFilter::Nearest;
+            let pixels = match delta.image {
+                ImageData::Color(image) => image.pixels.clone(),
+                ImageData::Font(image) => image.srgba_pixels(None).collect(),
+            };
+            if let Some([x, y]) = delta.pos {
+                let texture = self
+                    .textures
+                    .get_mut(&id)
+                    .context("预览纹理增量缺少基础图像")?;
+                if x + size[0] > texture.size[0] || y + size[1] > texture.size[1] {
+                    bail!("预览纹理增量越界");
+                }
+                for row in 0..size[1] {
+                    let start = (y + row) * texture.size[0] + x;
+                    texture.pixels[start..start + size[0]]
+                        .copy_from_slice(&pixels[row * size[0]..(row + 1) * size[0]]);
+                }
+            } else {
+                self.textures.insert(
+                    id,
+                    Texture {
+                        size,
+                        pixels,
+                        nearest,
+                    },
+                );
+            }
+        }
+        let primitives = ctx.tessellate(output.shapes, output.pixels_per_point);
+        let image = rasterize(
+            &primitives,
+            &self.textures,
+            width,
+            height,
+            output.pixels_per_point,
+        )?;
+        for id in output.textures_delta.free {
+            self.textures.remove(&id);
+        }
+        Ok(image)
+    }
+}
+
 pub fn run(args: &[String]) -> Result<()> {
     let path = Path::new(
         args.first()
