@@ -222,19 +222,60 @@ fn compatibility(meta: Option<&Value>, required: Option<Format>) -> Compatibilit
     }
 }
 fn text(value: &Value, depth: usize) -> String {
-    if depth > 16 {
+    if depth > 128 {
         return String::new();
     }
     match value {
-        Value::String(s) => s.clone(),
+        Value::String(s) => description_text(s),
+        Value::Number(_) | Value::Bool(_) => value.to_string(),
         Value::Array(values) => values.iter().map(|v| text(v, depth + 1)).collect(),
         Value::Object(_) => format!(
             "{}{}",
-            value["text"].as_str().unwrap_or_default(),
-            text(&value["extra"], depth + 1)
+            match &value["text"] {
+                Value::String(_) | Value::Number(_) | Value::Bool(_) =>
+                    text(&value["text"], depth + 1),
+                _ => String::new(),
+            },
+            if value["extra"].is_array() {
+                text(&value["extra"], depth + 1)
+            } else {
+                String::new()
+            }
         ),
         _ => String::new(),
     }
+}
+// StringUtils.parseColorEscapes / parseMinecraftColorCodes: only lowercase
+// vanilla codes are stripped; unknown codes and a trailing section sign remain.
+fn strip_color_codes(text: &str) -> String {
+    let mut chars = text.chars().peekable();
+    let mut result = String::with_capacity(text.len());
+    while let Some(ch) = chars.next() {
+        if ch == '§'
+            && chars
+                .peek()
+                .is_some_and(|code| matches!(code, '0'..='9' | 'a'..='f' | 'k'..='o' | 'r'))
+        {
+            chars.next();
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+fn description_text(text: &str) -> String {
+    if text.trim().is_empty() {
+        String::new()
+    } else {
+        strip_color_codes(text)
+    }
+}
+fn single_line(text: &str) -> String {
+    text.split(['\r', '\n'])
+        .map(|line| line.trim_matches(|ch: char| ch <= '\u{0020}'))
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join(" | ")
 }
 fn read_limited(path: &Path, limit: u64) -> Result<Vec<u8>> {
     let meta = fs::symlink_metadata(path)?;
@@ -269,6 +310,7 @@ pub struct Pack {
     pub name: String,
     pub title: String,
     pub description: String,
+    pub summary: String,
     pub compatibility: Compatibility,
     pub enabled: bool,
     pub icon: Option<eframe::egui::ColorImage>,
@@ -320,15 +362,15 @@ fn inspect(path: &Path, context: &ContextInfo, options: &Options) -> Result<Pack
         && contains(&options.incompatible, &name) == (compatibility != Compatibility::Compatible);
     Ok(Pack {
         path: path.into(),
-        title: if attr.is_file() {
-            path.file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned()
+        title: strip_color_codes(if attr.is_file() {
+            name.rsplit_once('.')
+                .map(|(title, _)| title)
+                .unwrap_or(&name)
         } else {
-            name.clone()
-        },
+            &name
+        }),
         name,
+        summary: single_line(&description),
         description,
         compatibility,
         enabled,
@@ -942,6 +984,35 @@ mod tests {
             Compatibility::MissingPack
         );
         assert_eq!(compatibility(Some(&old), None), Compatibility::MissingGame);
+    }
+    #[test]
+    fn descriptions_match_hmcl_components_codes_and_single_line_text() {
+        let description = json!([
+            {"text":"§a你好§r\r\n  第二行  ", "extra":[{"text":7}, true, null]},
+            "\n  \n§l末尾§z保留§A大写§",
+            {"text":{}, "extra":{"text":"ignored"}},
+            {"translate":"unsupported", "extra":[{"text":"附加"}]}
+        ]);
+        let result = text(&description, 0);
+        assert_eq!(result, "你好\r\n  第二行  7true\n  \n末尾§z保留§A大写§附加");
+        assert_eq!(
+            single_line(&result),
+            "你好 | 第二行  7true | 末尾§z保留§A大写§附加"
+        );
+        assert_eq!(text(&json!(" \r\n\t"), 0), "");
+        let fixture = Fixture::new();
+        let context = fixture.context(15, true);
+        let source = fixture.zip(
+            "§b颜色.zip",
+            json!({"pack":{"pack_format":15,"description":description}}),
+        );
+        import(&context, &source).unwrap();
+        let pack = list(&context).unwrap().remove(0);
+        assert_eq!(pack.title, "颜色");
+        assert_eq!(pack.name, "§b颜色.zip");
+        assert_eq!(pack.description, result);
+        assert_eq!(pack.summary, single_line(&result));
+        assert_eq!(fs::read(&source).unwrap(), fs::read(&pack.path).unwrap());
     }
     #[test]
     fn zip_import_retains_bytes_never_extracts_and_refuses_overwrite() {

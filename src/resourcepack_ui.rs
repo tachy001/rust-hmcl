@@ -123,6 +123,74 @@ mod tests {
         fs::remove_dir_all(canonical).unwrap();
     }
     #[test]
+    fn info_description_double_click_requests_exact_plain_text_copy() {
+        let ctx = egui::Context::default();
+        let description = "First line\nSecond line";
+        let mut browser = Browser {
+            info: Some(Pack {
+                path: "sample.zip".into(),
+                name: "sample.zip".into(),
+                title: "sample".into(),
+                description: description.into(),
+                summary: "First line | Second line".into(),
+                compatibility: Compatibility::Compatible,
+                enabled: false,
+                icon: None,
+            }),
+            ..Default::default()
+        };
+        let mut draw = |time, events| {
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(800., 560.),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| browser.dialogs(ctx, false),
+            )
+        };
+        draw(0., vec![]);
+        let output = draw(0.01, vec![]);
+        let position = output
+            .shapes
+            .iter()
+            .find_map(|shape| {
+                if let egui::epaint::Shape::Text(text) = &shape.shape {
+                    if text.galley.job.text == description {
+                        return Some(text.pos + text.galley.size() * 0.5);
+                    }
+                }
+                None
+            })
+            .expect("description must be painted in the actual info modal");
+        let pointer = |pressed| egui::Event::PointerButton {
+            pos: position,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        draw(
+            0.10,
+            vec![egui::Event::PointerMoved(position), pointer(true)],
+        );
+        let first = draw(0.11, vec![pointer(false)]);
+        assert!(!first
+            .platform_output
+            .commands
+            .iter()
+            .any(|command| matches!(command, egui::OutputCommand::CopyText(_))));
+        draw(0.20, vec![pointer(true)]);
+        let second = draw(0.21, vec![pointer(false)]);
+        assert!(second.platform_output.commands.iter().any(
+            |command| matches!(command, egui::OutputCommand::CopyText(text) if text == description)
+        ));
+        assert!(browser.info.is_some(), "copying does not dismiss the modal");
+    }
+    #[test]
     fn narrow_pack_lists_keep_controls_inside_content() {
         for width in [300., 550.] {
             let ctx = egui::Context::default();
@@ -139,6 +207,9 @@ mod tests {
                         name: format!("sample-{warning:?}.zip"),
                         title: "A long resource pack title to exercise truncation".into(),
                         description:
+                            "Long description which must stay before the toggle and details button"
+                                .into(),
+                        summary:
                             "Long description which must stay before the toggle and details button"
                                 .into(),
                         compatibility: warning,
@@ -460,12 +531,23 @@ impl Browser {
                 "搜索资源包名称或描述",
             );
         }
-        if self.rows.is_empty() && self.rx.is_none() && self.error.is_empty() {
+        if !self.rows.iter().any(|row| self.matches(&row.pack))
+            && self.rx.is_none()
+            && self.error.is_empty()
+        {
             theme::empty(
                 ui,
                 "texture",
-                "没有资源包",
-                "添加 ZIP 资源包，或将资源包文件夹放入此实例的 resourcepacks 目录。",
+                if self.searching {
+                    "没有搜索结果"
+                } else {
+                    "没有资源包"
+                },
+                if self.searching {
+                    "尝试其他名称或描述关键词。"
+                } else {
+                    "添加 ZIP 或文件夹资源包。"
+                },
             );
         }
         for row in &self.rows {
@@ -516,7 +598,7 @@ impl Browser {
                                 }
                                 ui.add(
                                     egui::Label::new(
-                                        RichText::new(&row.pack.description)
+                                        RichText::new(&row.pack.summary)
                                             .small()
                                             .color(ui.visuals().weak_text_color()),
                                     )
@@ -564,6 +646,7 @@ impl Browser {
     fn matches(&self, pack: &Pack) -> bool {
         let filter = self.filter.to_lowercase();
         pack.name.to_lowercase().contains(&filter)
+            || pack.title.to_lowercase().contains(&filter)
             || pack.description.to_lowercase().contains(&filter)
     }
     pub fn modal_open(&self) -> bool {
@@ -614,7 +697,17 @@ impl Browser {
                     egui::ScrollArea::vertical()
                         .max_height(ctx.screen_rect().height() * 0.5)
                         .show(ui, |ui| {
-                            ui.label(&pack.description);
+                            if ui
+                                .add(
+                                    egui::Label::new(&pack.description)
+                                        .wrap()
+                                        .sense(egui::Sense::click()),
+                                )
+                                .on_hover_text("双击复制描述")
+                                .double_clicked()
+                            {
+                                ctx.copy_text(pack.description.clone());
+                            }
                         });
                     close = theme::button(ui, "关闭").clicked();
                 });
