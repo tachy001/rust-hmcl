@@ -2953,7 +2953,7 @@ checksum = "3cd14fd5e3b777a7422cca79358c57a8f6e3a703d9ac187448d0daf220c2407f"
 
 [[package]]
 name = "rust-hmcl"
-version = "0.3.8"
+version = "0.3.9"
 dependencies = [
  "anyhow",
  "arboard",
@@ -2965,6 +2965,7 @@ dependencies = [
  "image",
  "md5",
  "open",
+ "raw-window-handle",
  "reqwest",
  "rfd",
  "serde",

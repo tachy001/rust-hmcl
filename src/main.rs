@@ -19,6 +19,7 @@ mod resourcepack_ui;
 mod resourcepacks;
 mod screenshots;
 mod theme;
+mod window_chrome;
 
 use config::Config;
 use eframe::egui::{self, Color32, RichText};
@@ -191,6 +192,7 @@ struct Launcher {
     instance_operation_error: String,
     screenshots: screenshots::Browser,
     resourcepacks: resourcepack_ui::Browser,
+    window_corners: window_chrome::Corners,
 }
 impl Launcher {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
@@ -310,6 +312,7 @@ impl Launcher {
             instance_operation_error: String::new(),
             screenshots: screenshots::Browser::default(),
             resourcepacks: resourcepack_ui::Browser::default(),
+            window_corners: window_chrome::Corners::default(),
         }
     }
     fn refresh(&mut self) {
@@ -1520,7 +1523,8 @@ impl eframe::App for Launcher {
         self.config.normalize();
         let _ = self.config.save();
     }
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.window_corners.update(frame);
         if self.page == Page::Java && !self.java_loaded && !self.busy {
             self.scan_java();
         }

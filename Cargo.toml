@@ -1,6 +1,6 @@
 [package]
 name = "rust-hmcl"
-version = "0.3.8"
+version = "0.3.9"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "A native Rust Minecraft launcher inspired by HMCL"
@@ -30,3 +30,6 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 [profile.release]
 strip = true
 lto = "thin"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+raw-window-handle = "0.6.2"

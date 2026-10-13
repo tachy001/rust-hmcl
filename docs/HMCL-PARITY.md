@@ -33,7 +33,9 @@
 
 ## 待还原和待验证
 
-未发布源码已接入实例分页的旧内容快照退出、400 ms 原版强调曲线和视口高度 20% 上滑；内存绘制快照不会重跑旧页操作，纹理保留与释放已通过测试。当前源码 46 项本地测试通过，4 项联网测试跳过。连续帧、过渡控件颜色与实际窗口仍待核验，现有 0.3.8 发布包不包含这次动画改动。
+0.3.9 已接入实例分页的旧内容快照退出、400 ms 原版强调曲线和视口高度 20% 上滑；内存绘制快照不会重跑旧页操作，纹理保留与释放已通过测试。连续帧、过渡控件颜色与实际窗口仍待核验。
+
+Windows 主窗口新增原生圆角区域，12 个逻辑像素半径，按原生 DPI 与窗口尺寸更新，最大化取消区域。隐藏窗口实际 API 测试已核验角点排除、中心与边缘保留、不同尺寸／DPI 和区域清除。参考：[SetWindowRgn](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowrgn)、[CreateRoundRectRgn](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-createroundrectrgn)。离屏软件预览不经过原生窗口裁剪，因此不能用矩形 PNG 判断这项效果；Linux/macOS 外沿圆角仍待实现及真机验证。
 
 | 领域 | 待完成内容 | 验收依据 |
 | --- | --- | --- |
