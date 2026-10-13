@@ -33,3 +33,6 @@ lto = "thin"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 raw-window-handle = "0.6.2"
+
+[patch.crates-io]
+egui = { path = "vendor/egui" }

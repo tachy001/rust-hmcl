@@ -194,6 +194,18 @@ impl Frame {
     pub fn interactive(&self) -> bool {
         self.progress >= 1.
     }
+    pub fn show<R>(
+        &self,
+        ui: &mut egui::Ui,
+        contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> egui::InnerResponse<R> {
+        ui.scope(|ui| {
+            if !self.interactive() {
+                ui.disable_interaction();
+            }
+            contents(ui)
+        })
+    }
 }
 
 #[cfg(test)]
@@ -235,7 +247,7 @@ mod tests {
                 |ctx| {
                     egui::CentralPanel::default().show(ctx, |ui| {
                         let frame = animation.begin(ui, key.into(), false);
-                        ui.add_enabled_ui(frame.interactive(), |ui| {
+                        frame.show(ui, |ui| {
                             let rect = egui::Rect::from_min_size(
                                 ui.min_rect().min,
                                 egui::vec2(100., 100.),
@@ -265,6 +277,59 @@ mod tests {
         assert!(ctx.tex_manager().read().meta(id).is_none());
     }
     #[test]
+    fn input_gate_preserves_page_colors_but_keeps_real_disabled_tint() {
+        let normal = egui::Color32::from_rgb(12, 173, 91);
+        let disabled = egui::Color32::from_rgb(231, 56, 17);
+        let button_color = egui::Color32::from_rgb(27, 88, 209);
+        for parent_enabled in [true, false] {
+            let ctx = egui::Context::default();
+            let mut motion = TabTransition::default();
+            let _ = ctx.run(Default::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.add_enabled_ui(parent_enabled, |ui| {
+                        let mut frame = motion.begin(ui, "page".into(), false);
+                        frame.progress = 0.5;
+                        frame.show(ui, |ui| {
+                            assert!(!ui.is_enabled());
+                            assert_eq!(ui.is_visually_enabled(), parent_enabled);
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    crate::theme::MaterialButton::new("Action").fill(button_color),
+                                );
+                                let (rect, _) = ui.allocate_exact_size(
+                                    egui::vec2(40., 40.),
+                                    egui::Sense::hover(),
+                                );
+                                ui.painter().rect_filled(rect, 0., normal);
+                                ui.add_enabled_ui(false, |ui| {
+                                    assert!(!ui.is_visually_enabled());
+                                    let (rect, _) = ui.allocate_exact_size(
+                                        egui::vec2(40., 40.),
+                                        egui::Sense::hover(),
+                                    );
+                                    ui.painter().rect_filled(rect, 0., disabled);
+                                });
+                            });
+                        });
+                        motion.finish(ui, frame);
+                    });
+                });
+            });
+            let colors: Vec<_> = motion
+                .last
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    Shape::Rect(rect) => Some(rect.fill),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(colors.contains(&normal), parent_enabled);
+            assert_eq!(colors.contains(&button_color), parent_enabled);
+            assert!(!colors.contains(&disabled));
+        }
+    }
+    #[test]
     fn moving_content_rejects_input_and_finishes_at_exact_deadline() {
         let ctx = egui::Context::default();
         let mut motion = TabTransition::default();
@@ -287,7 +352,7 @@ mod tests {
                     egui::CentralPanel::default().show(ctx, |ui| {
                         let frame = motion.begin(ui, key.into(), reduced);
                         interactive = frame.interactive();
-                        ui.add_enabled_ui(interactive, |ui| {
+                        frame.show(ui, |ui| {
                             assert_eq!(ui.is_enabled(), interactive);
                             let response = ui.add(crate::theme::MaterialButton::new("Action"));
                             button = response.id;

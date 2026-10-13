@@ -120,7 +120,7 @@ impl Launcher {
         let mut animation = std::mem::take(&mut self.instance_transition);
         let key = format!("{}|{}|{}", config.game_dir, id, self.instance_tab as u8);
         let frame = animation.begin(ui, key, self.config.reduce_motion);
-        ui.add_enabled_ui(frame.interactive(), |ui| match self.instance_tab {
+        frame.show(ui, |ui| match self.instance_tab {
             Tab::Settings => self.instance_settings(ui, &id),
             Tab::Components => self.instance_components(ui, &id),
             Tab::Mods => self.instance_mods(ui, &config),

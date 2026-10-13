@@ -31,3 +31,6 @@ jobs:
             target/release/rust-hmcl.exe
             LICENSE
             README.md
+            vendor/egui/LICENSE-MIT
+            vendor/egui/LICENSE-APACHE
+            vendor/egui/PATCHES.md

@@ -490,7 +490,7 @@ impl MaterialButton {
 impl Widget for MaterialButton {
     fn ui(self, ui: &mut egui::Ui) -> Response {
         let label = self.text.clone();
-        let foreground = if !ui.is_enabled() {
+        let foreground = if !ui.is_visually_enabled() {
             ui.visuals().weak_text_color()
         } else if let Some(color) = self.foreground {
             color
@@ -557,7 +557,7 @@ impl Widget for MaterialButton {
             hover,
         );
         let rect = rect.shrink(press * 0.9);
-        let background = if ui.is_enabled() {
+        let background = if ui.is_visually_enabled() {
             background
         } else {
             blend(background, surface(ui), 0.6)
