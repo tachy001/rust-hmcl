@@ -105,6 +105,29 @@ try {
     height: innerHeight,
     devicePixelRatio,
   }));
+  const typography = await page.evaluate(() => ({
+    bodyFamily: getComputedStyle(document.body).fontFamily,
+    sidebarSize: getComputedStyle(document.querySelector('.sidebar > button.selected')).fontSize,
+  }));
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('DOM.enable');
+  await cdp.send('CSS.enable');
+  const { root: documentRoot } = await cdp.send('DOM.getDocument');
+  const { nodeId } = await cdp.send('DOM.querySelector', {
+    nodeId: documentRoot.nodeId,
+    selector: '.sidebar > button.selected > span:last-child',
+  });
+  const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
+  typography.renderedFonts = fonts.map(({ familyName, glyphCount }) => ({
+    familyName,
+    glyphCount,
+  }));
+  await cdp.detach();
+  assert.equal(typography.sidebarSize, '13px');
+  assert.ok(
+    typography.renderedFonts.some((font) => font.glyphCount >= 2),
+    'Chinese navigation glyphs were not rendered',
+  );
   const nativeSize = await invoke('plugin:window|inner_size', { label: 'main' });
   assert.ok(Math.abs(nativeSize.width / layout.devicePixelRatio - layout.width) <= 2);
   assert.ok(Math.abs(nativeSize.height / layout.devicePixelRatio - layout.height) <= 2);
@@ -187,6 +210,7 @@ try {
     fixture,
     transport: 'real release Tauri / WebView2 / native IPC',
     layout,
+    typography,
     nativeSize,
     url: page.url(),
     nativeWindowVisible: false,

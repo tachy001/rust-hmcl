@@ -103,7 +103,11 @@ Windows GNU 的 Tauri 发布构建与严格静态检查通过；Rust 测试合�
 错误输入不落盘、账户与全局设置保存、主题、模组启禁用、资源包确认以及原生后台
 复制任务及完成刷新。截图已查看；测试使用手工样本，未启动 Java 或游戏。
 本机 150% DPI 下原生客户区 1620×1007，与页面 1080×672 CSS 像素匹配。
+验证还记录真实字体渲染结果，本机中文侧栏使用 Microsoft YaHei、字号 13px。
 隐藏窗口的渲染不能证明可见窗口的边框、圆角和最大化行为。
+
+提交 `9bce410` 的 [Windows CI](https://github.com/tachy001/rust-hmcl/actions/runs/39033146363/job/117397546262)
+已完成发布构建和同一原生验证脚本，全部通过，并上传原生 WebView2 截图与记录。
 
 提交 `b590705` 的 [GitHub 构建](https://github.com/tachy001/rust-hmcl/actions/runs/39032592512)
 已确认新版 `web-desktop` 在 Windows、Ubuntu 24.04、macOS ARM 和 Intel 的核心测试、
