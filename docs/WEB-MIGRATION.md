@@ -37,6 +37,8 @@ cargo test -p rust-hmcl
 cargo check -p rust-hmcl-desktop
 cargo build -p rust-hmcl --bin hmcl-service --no-default-features
 npm run test:ui
+# Windows / WebView2, using the real release executable in a hidden window:
+npm run test:native
 ```
 
 本机使用父目录 target 缓存时，为 Cargo 命令追加 `--target-dir ../target`。
@@ -45,8 +47,16 @@ UI 测试默认从父目录 `target/debug/` 查找服务程序，也可用环境
 平台需安装 Playwright Chromium。测试只操作浏览器内部虚拟输入，
 不读取桌面、不移动用户鼠标、不启动 Minecraft。
 
+原生验证默认使用父目录 `target/release/rust-hmcl-desktop.exe`，也可用
+`HMCL_DESKTOP_BIN` 指定。它创建项目内 `.tools/native-ui-proof-*` 独立配置，
+使用同一个发布程序的 `--verify-hidden-ui` 开关，在创建前关闭窗口可见性和焦点，
+分配独立 WebView2 配置目录与临时调试端口。测试通过浏览器内部协议操作真实
+WebView2，调用正常 Tauri 命令，不替换 IPC、不增加测试命令，不发送桌面输入。
+运行记录、程序 SHA-256、实际 DPI / 客户区尺寸及渲染截图保存在
+`dist/native-ui-proof/`。正常启动不会启用隐藏模式或调试端口。
+
 打包资源构建：`npm run tauri build -- --no-bundle`。目前 bundle 关闭，
-安装器、应用签名、三端运行、原生窗口圆角和 WebView 分发均需另行验收。
+安装器、应用签名、三端可见窗口运行、原生窗口圆角和 WebView 分发均需另行验收。
 
 Windows 构建后可运行 `./scripts/package-windows.ps1`；使用父目录缓存时
 传入 `-TargetDir ../target`。脚本将程序及存在时必需的 GNU WebView2Loader.dll
@@ -85,6 +95,16 @@ Web 集成测试通过真实 Service 写入独立手工样本，检查账户和�
 模组文件改名、资源包确认与 options.txt 写入。它代替 Tauri IPC 使用 stdio
 传输，所以不能作为原生 WebView / IPC / 安装器 / 三端运行的验收证据。
 
-本轮 Windows GNU 的 Tauri 发布构建与严格静态检查通过；Rust 测试合计
+Windows GNU 的 Tauri 发布构建与严格静态检查通过；Rust 测试合计
 60 项通过、4 项联网测试跳过。Web 类型检查、生产资源构建及 22 项无窗口
-集成检查通过。尚未启动新原生窗口，也未实际验证 Linux / macOS 构建与运行。
+集成检查通过。
+
+新增 11 项真实 Tauri / WebView2 检查通过：隐藏窗口、实际资源和 CSP、IPC、
+错误输入不落盘、账户与全局设置保存、主题、模组启禁用、资源包确认以及原生后台
+复制任务及完成刷新。截图已查看；测试使用手工样本，未启动 Java 或游戏。
+本机 150% DPI 下原生客户区 1620×1007，与页面 1080×672 CSS 像素匹配。
+隐藏窗口的渲染不能证明可见窗口的边框、圆角和最大化行为。
+
+提交 `b590705` 的 [GitHub 构建](https://github.com/tachy001/rust-hmcl/actions/runs/39032592512)
+已确认新版 `web-desktop` 在 Windows、Ubuntu 24.04、macOS ARM 和 Intel 的核心测试、
+前端构建与 Tauri 发布构建全部通过。这是构建证据，Linux/macOS 实际运行仍待验证。

@@ -76,6 +76,32 @@ async fn enable_resources(
     blocking(move || service.enable_resources(&names, enabled, confirmed)).await
 }
 fn main() {
+    let mut context = tauri::generate_context!();
+    if std::env::args().any(|argument| argument == "--verify-hidden-ui") {
+        // The verification helper uses a private profile and a hidden native window.
+        // No test transport or extra IPC commands are added to the application.
+        let result = (|| -> anyhow::Result<()> {
+            let directory =
+                std::path::PathBuf::from(std::env::var("RUST_HMCL_DATA_DIR")?).canonicalize()?;
+            anyhow::ensure!(
+                directory.join("config.json").is_file(),
+                "Hidden verification requires an existing isolated configuration"
+            );
+            let port: u16 = std::env::var("HMCL_UI_PROOF_PORT")?.parse()?;
+            anyhow::ensure!(port >= 1024, "Invalid verification port");
+            for window in &mut context.config_mut().app.windows {
+                window.visible = false;
+                window.focus = false;
+                window.data_directory = Some(directory.join("webview-profile"));
+                window.additional_browser_args = Some(format!("--remote-debugging-port={port} --disable-backgrounding-occluded-windows --disable-renderer-backgrounding"));
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            eprintln!("Hidden UI verification: {error:#}");
+            std::process::exit(2);
+        }
+    }
     tauri::Builder::default()
         .setup(|app| {
             app.manage(Service::load()?);
@@ -94,6 +120,6 @@ fn main() {
             resource_packs,
             enable_resources
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("无法运行 Rust HMCL");
 }
