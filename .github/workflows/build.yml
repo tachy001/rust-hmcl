@@ -1,6 +1,36 @@
 name: Native launcher
 on: [push, pull_request, workflow_dispatch]
 jobs:
+  web-desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04, macos-14, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev
+      - run: npm ci
+      - run: npm run build
+      - run: cargo test -p rust-hmcl --lib --no-default-features --locked
+      - run: npm run tauri build -- --no-bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-hmcl-web-${{ matrix.os }}
+          path: |
+            target/release/rust-hmcl-desktop
+            target/release/rust-hmcl-desktop.exe
+            target/release/WebView2Loader.dll
+            LICENSE
+            assets/hmcl/ATTRIBUTION.md
+            docs/WEB-MIGRATION.md
   build:
     strategy:
       fail-fast: false

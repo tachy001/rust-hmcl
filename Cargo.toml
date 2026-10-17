@@ -4,19 +4,34 @@ version = "0.3.11"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "A native Rust Minecraft launcher inspired by HMCL"
+default-run = "rust-hmcl"
+
+[workspace]
+members = ["src-tauri"]
+default-members = ["."]
+resolver = "2"
+
+[features]
+default = ["legacy-ui"]
+legacy-ui = ["dep:arboard", "dep:eframe", "dep:egui_extras", "dep:rfd", "dep:open", "dep:raw-window-handle"]
+
+[[bin]]
+name = "rust-hmcl"
+path = "src/main.rs"
+required-features = ["legacy-ui"]
 
 [dependencies]
-arboard = "3.6.1"
+arboard = { version = "3.6.1", optional = true }
 anyhow = "1"
 dirs = "6"
-eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
-egui_extras = { version = "0.31", default-features = false, features = ["svg", "image"] }
+eframe = { version = "0.31", optional = true, default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+egui_extras = { version = "0.31", optional = true, default-features = false, features = ["svg", "image"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 flate2 = "1"
 md5 = "0.7"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-rfd = "0.15"
-open = "5"
+rfd = { version = "0.15", optional = true }
+open = { version = "5", optional = true }
 encoding_rs = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -32,7 +47,7 @@ strip = true
 lto = "thin"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-raw-window-handle = "0.6.2"
+raw-window-handle = { version = "0.6.2", optional = true }
 
 [patch.crates-io]
 egui = { path = "vendor/egui" }

@@ -1,0 +1,790 @@
+<script setup lang="ts">
+import { computed, nextTick, onMounted, onUnmounted, ref, toRaw, watch } from 'vue';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import Icon from './Icon.vue';
+import InstanceSettings from './InstanceSettings.vue';
+import {
+  api,
+  desktopAvailable,
+  type Config,
+  type Job,
+  type Mod,
+  type Pack,
+  type Runtime,
+  type Snapshot,
+  type Task,
+  type Version,
+} from './api';
+import { emphasizedCss } from './motion';
+
+type Page =
+  | 'home'
+  | 'accounts'
+  | 'versions'
+  | 'download'
+  | 'java'
+  | 'settings'
+  | 'logs'
+  | 'about'
+  | 'instance';
+const page = ref<Page>('home'),
+  tab = ref('settings'),
+  transitioning = ref(false);
+const data = ref<Snapshot | null>(null),
+  draft = ref<Config | null>(null),
+  error = ref(''),
+  loading = ref(false),
+  menu = ref(false);
+const task = ref<Task>({
+  id: 0,
+  running: false,
+  game_running: false,
+  progress: 0,
+  status: '准备就绪',
+  error: null,
+  logs: [],
+});
+const releases = ref<Version[]>([]),
+  runtimes = ref<Runtime[]>([]),
+  mods = ref<Mod[]>([]),
+  packs = ref<Pack[]>([]);
+const query = ref(''),
+  snapshots = ref(false),
+  username = ref(''),
+  javaMajor = ref(21);
+const dialog = ref<{ title: string; message: string; confirm?: () => Promise<void> } | null>(null);
+const accountError = ref('');
+const modalElement = ref<HTMLElement | null>(null);
+let previousFocus: HTMLElement | null = null;
+let timer: ReturnType<typeof setInterval> | undefined,
+  polling = false;
+const navigation: [Page, string, string][] = [
+  ['home', 'home', '首页'],
+  ['accounts', 'person', '账户'],
+  ['versions', 'folder', '游戏列表'],
+  ['download', 'download', '下载'],
+  ['java', 'deployed_code', 'Java 管理'],
+  ['settings', 'settings', '设置'],
+  ['logs', 'menu', '日志'],
+  ['about', 'info', '关于'],
+];
+const title = computed(() =>
+  page.value === 'instance'
+    ? `实例管理 - ${data.value?.config.selected ?? ''}`
+    : (navigation.find((item) => item[0] === page.value)?.[2] ?? '首页'),
+);
+const current = computed(() =>
+  data.value?.instances.find((item) => item.id === data.value?.config.selected),
+);
+const versions = computed(
+  () =>
+    data.value?.instances.filter((item) =>
+      `${item.id} ${item.subtitle}`.toLowerCase().includes(query.value.toLowerCase()),
+    ) ?? [],
+);
+const remoteVersions = computed(() =>
+  releases.value
+    .filter(
+      (item) =>
+        (snapshots.value || item.type === 'release') &&
+        item.id.toLowerCase().includes(query.value.toLowerCase()),
+    )
+    .slice(0, 150),
+);
+const tabs = [
+  ['settings', 'settings', '游戏设置'],
+  ['components', 'deployed_code', '自动安装'],
+  ['mods', 'extension', '模组管理'],
+  ['resources', 'texture', '资源包管理'],
+] as const;
+function fail(cause: unknown) {
+  error.value = String(cause);
+}
+async function refresh() {
+  try {
+    data.value = await api.snapshot();
+    draft.value = structuredClone(toRaw(data.value.config));
+  } catch (cause) {
+    fail(cause);
+  }
+}
+async function save(config: Config) {
+  try {
+    data.value = await api.save(config);
+    draft.value = structuredClone(toRaw(data.value.config));
+    return true;
+  } catch (cause) {
+    fail(cause);
+    return false;
+  }
+}
+async function select(id: string) {
+  if (!data.value) return false;
+  const saved = await save({ ...data.value.config, selected: id });
+  if (saved) menu.value = false;
+  return saved;
+}
+async function start(job: Job) {
+  try {
+    error.value = '';
+    await api.start(job);
+    task.value = await api.task();
+  } catch (cause) {
+    fail(cause);
+  }
+}
+async function launch(id = data.value?.config.selected) {
+  if (id) {
+    if (id !== data.value?.config.selected && !(await select(id))) return;
+    await start({ kind: 'launch', id });
+  } else go('versions');
+}
+async function theme() {
+  if (data.value) await save({ ...data.value.config, dark_mode: !data.value.config.dark_mode });
+}
+function go(next: Page) {
+  page.value = next;
+  query.value = '';
+  menu.value = false;
+}
+function leavePage(element: Element) {
+  element.setAttribute('inert', '');
+}
+function ripple(event: PointerEvent) {
+  if (data.value?.config.reduce_motion || matchMedia('(prefers-reduced-motion: reduce)').matches)
+    return;
+  const target = event.target instanceof Element ? event.target.closest('button') : null;
+  if (!target || target.disabled) return;
+  const rect = target.getBoundingClientRect(),
+    size = Math.max(rect.width, rect.height) * 2;
+  const wave = document.createElement('span');
+  wave.className = 'ripple';
+  wave.setAttribute('aria-hidden', 'true');
+  Object.assign(wave.style, {
+    width: `${size}px`,
+    height: `${size}px`,
+    left: `${event.clientX - rect.left - size / 2}px`,
+    top: `${event.clientY - rect.top - size / 2}px`,
+  });
+  target.append(wave);
+  wave.addEventListener('animationend', () => wave.remove(), { once: true });
+  setTimeout(() => wave.remove(), 700);
+}
+async function inspect(id: string) {
+  if (await select(id)) {
+    tab.value = 'settings';
+    go('instance');
+  }
+}
+async function loadPage() {
+  error.value = '';
+  loading.value = true;
+  try {
+    if (page.value === 'download' && !releases.value.length) releases.value = await api.versions();
+    if (page.value === 'java') runtimes.value = await api.runtimes();
+    if (page.value === 'instance' && tab.value === 'mods') mods.value = await api.mods();
+    if (page.value === 'instance' && tab.value === 'resources') packs.value = await api.packs();
+  } catch (cause) {
+    fail(cause);
+  } finally {
+    loading.value = false;
+  }
+}
+watch([page, tab], loadPage);
+watch(dialog, async (value) => {
+  if (value) {
+    previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    await nextTick();
+    modalElement.value?.querySelector<HTMLButtonElement>('button:last-child')?.focus();
+  } else {
+    await nextTick();
+    previousFocus?.focus();
+  }
+});
+function trapTab(event: KeyboardEvent) {
+  const buttons = [...(modalElement.value?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+  if (!buttons.length) return;
+  const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+  buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length]?.focus();
+}
+async function account() {
+  if (!data.value) return;
+  if (!/^[A-Za-z0-9_]{1,16}$/.test(username.value)) {
+    accountError.value = '请输入 1–16 位字母、数字或下划线。';
+    return;
+  }
+  if (
+    await save({
+      ...data.value.config,
+      player: username.value,
+      accounts: [...data.value.config.accounts, username.value],
+    })
+  ) {
+    username.value = '';
+    accountError.value = '';
+  }
+}
+async function chooseJava(runtime: Runtime) {
+  if (data.value) await save({ ...data.value.config, java: runtime.path });
+}
+async function toggleMod(name: string) {
+  try {
+    mods.value = await api.toggleMod(name);
+  } catch (cause) {
+    fail(cause);
+  }
+}
+async function togglePack(pack: Pack, confirmed = false) {
+  if (!pack.enabled && !pack.compatible && !confirmed) {
+    dialog.value = {
+      title: '资源包兼容性提示',
+      message: `${pack.title}\n${pack.warning ?? '可能不兼容当前游戏'}，仍要启用吗？`,
+      confirm: () => togglePack(pack, true),
+    };
+    return;
+  }
+  try {
+    packs.value = await api.enablePacks([pack.name], !pack.enabled, confirmed);
+  } catch (cause) {
+    fail(cause);
+  }
+}
+function stop() {
+  if (task.value.game_running)
+    dialog.value = {
+      title: '结束游戏',
+      message: '确定结束正在运行的 Minecraft 吗？',
+      confirm: async () => {
+        await api.cancel();
+      },
+    };
+  else void api.cancel().catch(fail);
+}
+async function confirmDialog() {
+  const action = dialog.value?.confirm;
+  dialog.value = null;
+  if (action)
+    try {
+      await action();
+    } catch (cause) {
+      fail(cause);
+    }
+}
+function windowAction(action: 'minimize' | 'toggleMaximize' | 'close') {
+  if (!desktopAvailable()) return;
+  if (action === 'close' && task.value.running) {
+    dialog.value = { title: '任务仍在运行', message: '请先结束当前任务，再关闭启动器。' };
+    return;
+  }
+  void getCurrentWindow()[action]().catch(fail);
+}
+async function poll() {
+  if (polling || !desktopAvailable()) return;
+  polling = true;
+  try {
+    const previous = task.value;
+    task.value = await api.task();
+    if (previous.running && !task.value.running) {
+      await refresh();
+      await loadPage();
+    }
+    if (task.value.error && task.value.error !== previous.error) error.value = task.value.error;
+  } catch (cause) {
+    fail(cause);
+  } finally {
+    polling = false;
+  }
+}
+onMounted(async () => {
+  if (!desktopAvailable()) {
+    error.value = '浏览器预览未连接桌面后端。请使用 npm run desktop 启动桌面版。';
+    return;
+  }
+  await refresh();
+  await poll();
+  timer = setInterval(poll, 500);
+});
+onUnmounted(() => {
+  if (timer) clearInterval(timer);
+});
+</script>
+
+<template>
+  <div
+    class="launcher"
+    :class="{ dark: data?.config.dark_mode, reduced: data?.config.reduce_motion }"
+    :style="{ '--ease-emphasized': emphasizedCss }"
+    @pointerdown="ripple"
+  >
+    <div class="application" :inert="!!dialog">
+      <header
+        class="titlebar"
+        @dblclick.self="windowAction('toggleMaximize')"
+        data-tauri-drag-region
+      >
+        <button
+          v-if="page !== 'home'"
+          class="window-button back"
+          aria-label="返回首页"
+          @click="go('home')"
+        >
+          <Icon name="arrow_back" />
+        </button>
+        <img v-else class="title-logo" src="/hmcl/title.png" alt="HMCL" />
+        <span data-tauri-drag-region>{{
+          page === 'home' ? 'Hello Minecraft! Launcher · Rust' : title
+        }}</span>
+        <div class="window-actions">
+          <button
+            class="window-button"
+            aria-label="切换主题"
+            :disabled="!data || task.running"
+            @click="theme"
+          >
+            <Icon name="wb_sunny" /></button
+          ><button class="window-button" aria-label="最小化" @click="windowAction('minimize')">
+            −</button
+          ><button
+            class="window-button"
+            aria-label="最大化"
+            @click="windowAction('toggleMaximize')"
+          >
+            □</button
+          ><button class="window-button close" aria-label="关闭窗口" @click="windowAction('close')">
+            <Icon name="close" />
+          </button>
+        </div>
+      </header>
+      <aside class="sidebar">
+        <template v-if="page === 'instance'">
+          <button
+            v-for="item in tabs"
+            :key="item[0]"
+            :class="{ selected: tab === item[0] }"
+            @click="tab = item[0]"
+          >
+            <Icon :name="item[1]" /><span>{{ item[2] }}</span>
+          </button>
+          <div class="nav-spacer"></div>
+          <button :disabled="task.running" @click="launch()">
+            <Icon name="gamepad" /><span>测试游戏</span></button
+          ><button @click="go('versions')"><Icon name="folder" /><span>返回游戏列表</span></button>
+        </template>
+        <template v-else>
+          <button class="account-nav" @click="go('accounts')">
+            <Icon name="person" /><span
+              ><b>{{ data?.config.player ?? '账户' }}</b
+              ><small>离线账户</small></span
+            >
+          </button>
+          <div class="nav-divider"></div>
+          <button
+            v-for="item in navigation"
+            :key="item[0]"
+            :class="{ selected: page === item[0] }"
+            @click="go(item[0])"
+          >
+            <Icon :name="item[1]" /><span>{{ item[2] }}</span>
+          </button>
+          <div class="nav-spacer"></div>
+          <div class="sidebar-footer">Rust HMCL <small>0.3.11 · Web 界面迁移中</small></div>
+        </template>
+      </aside>
+      <main class="content" :class="{ home: page === 'home' }">
+        <div v-if="error" class="error-banner" role="alert">
+          <Icon name="error" /><span>{{ error }}</span
+          ><button aria-label="关闭提示" @click="error = ''">×</button>
+        </div>
+        <Transition
+          name="page"
+          @before-leave="leavePage"
+          @before-enter="transitioning = true"
+          @after-enter="transitioning = false"
+          @enter-cancelled="transitioning = false"
+        >
+          <section :key="`${page}/${tab}`" class="page" :inert="transitioning || !!dialog">
+            <template v-if="page === 'home'">
+              <Transition name="popup" @before-leave="leavePage"
+                ><div v-if="menu" class="version-popup" role="menu">
+                  <h3>选择游戏版本</h3>
+                  <button
+                    v-for="instance in data?.instances"
+                    :key="instance.id"
+                    @click="select(instance.id)"
+                  >
+                    <img :src="`/hmcl/${instance.icon}.png`" alt="" /><span
+                      >{{ instance.id }}<small>{{ instance.subtitle }}</small></span
+                    ><Icon v-if="instance.id === data?.config.selected" name="check" />
+                  </button>
+                  <p v-if="!data?.instances.length">尚未安装游戏</p>
+                  <button @click="go('download')"><Icon name="add" />安装新版本</button>
+                </div></Transition
+              >
+              <div class="launch-area">
+                <div class="launch-selection">
+                  {{ current?.subtitle ?? '选择或下载 Minecraft 版本' }}
+                </div>
+                <div class="launch-split">
+                  <button
+                    class="launch-primary"
+                    :disabled="task.running || !data"
+                    @click="launch()"
+                  >
+                    <b>启动游戏</b
+                    ><span>{{ data?.config.selected || '未选择游戏版本' }}</span></button
+                  ><button
+                    class="launch-menu"
+                    aria-label="选择游戏版本"
+                    :aria-expanded="menu"
+                    :disabled="task.running"
+                    @click="menu = !menu"
+                  >
+                    <Icon name="arrow_drop_down" :class="{ rotated: menu }" />
+                  </button>
+                </div>
+              </div>
+            </template>
+            <template v-else-if="page === 'accounts'">
+              <h1>账户</h1>
+              <p class="subtitle">选择用于启动 Minecraft 的账户。</p>
+              <div class="list">
+                <button
+                  v-for="name in data?.config.accounts"
+                  :key="name"
+                  class="list-row"
+                  :class="{ active: name === data?.config.player }"
+                  :disabled="task.running"
+                  @click="data && save({ ...data.config, player: name })"
+                >
+                  <Icon name="person" /><span
+                    ><b>{{ name }}</b
+                    ><small>离线账户</small></span
+                  ><Icon v-if="name === data?.config.player" name="check" />
+                </button>
+              </div>
+              <form class="panel compact" @submit.prevent="account">
+                <h2>添加离线账户</h2>
+                <div class="inline">
+                  <input
+                    v-model="username"
+                    aria-label="离线用户名"
+                    placeholder="用户名"
+                    maxlength="16"
+                    :disabled="task.running"
+                  /><button class="primary" :disabled="task.running || !data">添加账户</button>
+                </div>
+                <p v-if="accountError" class="field-error">{{ accountError }}</p>
+                <p class="subtitle">Microsoft 登录与第三方认证尚未迁移。</p>
+              </form>
+            </template>
+            <template v-else-if="page === 'versions'">
+              <div class="toolbar">
+                <h1>游戏列表</h1>
+                <button :disabled="loading || task.running" @click="refresh">
+                  <Icon name="refresh" />刷新</button
+                ><button @click="go('download')"><Icon name="add" />安装游戏</button>
+              </div>
+              <input
+                v-model="query"
+                class="search"
+                aria-label="搜索游戏版本"
+                placeholder="搜索游戏版本"
+              />
+              <div class="list">
+                <div
+                  v-for="instance in versions"
+                  :key="instance.id"
+                  class="list-row"
+                  :class="{ active: instance.id === data?.config.selected }"
+                >
+                  <input
+                    type="radio"
+                    name="instance"
+                    :aria-label="`选择 ${instance.id}`"
+                    :checked="instance.id === data?.config.selected"
+                    :disabled="task.running"
+                    @click.prevent="select(instance.id)"
+                  /><img :src="`/hmcl/${instance.icon}.png`" alt="" /><button
+                    class="row-content"
+                    :disabled="task.running"
+                    @click="inspect(instance.id)"
+                  >
+                    <b>{{ instance.id }}</b
+                    ><small>{{ instance.subtitle }}</small></button
+                  ><button
+                    class="icon-button"
+                    :aria-label="`启动 ${instance.id}`"
+                    :disabled="task.running"
+                    @click="launch(instance.id)"
+                  >
+                    <Icon name="gamepad" /></button
+                  ><button
+                    class="icon-button"
+                    :aria-label="`管理 ${instance.id}`"
+                    :disabled="task.running"
+                    @click="inspect(instance.id)"
+                  >
+                    <Icon name="settings" />
+                  </button>
+                </div>
+              </div>
+              <div v-if="!versions.length" class="empty">
+                <Icon name="folder" />
+                <h2>没有游戏版本</h2>
+                <p>下载 Minecraft，或在设置中选择已有游戏目录。</p>
+              </div>
+            </template>
+            <template v-else-if="page === 'download'">
+              <h1>下载游戏</h1>
+              <div class="toolbar">
+                <input
+                  v-model="query"
+                  aria-label="搜索可下载版本"
+                  placeholder="搜索 Minecraft 版本"
+                /><label class="check"
+                  ><input v-model="snapshots" type="checkbox" />显示快照及历史版本</label
+                ><button
+                  :disabled="loading"
+                  @click="
+                    releases = [];
+                    loadPage();
+                  "
+                >
+                  <Icon name="refresh" />刷新
+                </button>
+              </div>
+              <p v-if="loading" class="loading">正在获取官方版本列表…</p>
+              <div class="list">
+                <div v-for="version in remoteVersions" :key="version.id" class="list-row">
+                  <img src="/hmcl/grass.png" alt="" /><span
+                    ><b>{{ version.id }}</b
+                    ><small>{{ version.type === 'release' ? '正式版' : version.type }}</small></span
+                  ><button
+                    :disabled="task.running"
+                    @click="start({ kind: 'install', id: version.id })"
+                  >
+                    <Icon name="download" />安装
+                  </button>
+                </div>
+              </div>
+            </template>
+            <template v-else-if="page === 'java'">
+              <div class="toolbar">
+                <h1>Java 管理</h1>
+                <button :disabled="loading" @click="loadPage">
+                  <Icon name="refresh" />重新检测
+                </button>
+              </div>
+              <p class="subtitle">启动器无需 Java；启动 Minecraft 时使用下列运行环境。</p>
+              <div class="list">
+                <button
+                  v-for="runtime in runtimes"
+                  :key="runtime.path"
+                  class="list-row"
+                  :class="{ active: data?.config.java === runtime.path }"
+                  :disabled="task.running"
+                  @click="chooseJava(runtime)"
+                >
+                  <Icon name="deployed_code" /><span
+                    ><b>Java {{ runtime.major }} · {{ runtime.vendor }}</b
+                    ><small>{{ runtime.version }} · {{ runtime.architecture }}</small
+                    ><small>{{ runtime.path }}</small></span
+                  ><Icon v-if="data?.config.java === runtime.path" name="check" />
+                </button>
+              </div>
+              <div class="panel compact">
+                <h2>下载 Java</h2>
+                <div class="inline">
+                  <select v-model="javaMajor" aria-label="Java 版本">
+                    <option v-for="major in [8, 11, 17, 21, 25]" :value="major">
+                      Java {{ major }}
+                    </option></select
+                  ><button
+                    :disabled="task.running"
+                    @click="start({ kind: 'java', major: javaMajor })"
+                  >
+                    <Icon name="download" />下载 Temurin
+                  </button>
+                </div>
+              </div>
+            </template>
+            <template v-else-if="page === 'settings' && draft">
+              <h1>启动器设置</h1>
+              <form @submit.prevent="save(draft!)">
+                <fieldset :disabled="task.running">
+                  <div class="panel">
+                    <h2>游戏目录</h2>
+                    <label>目录路径<input v-model="draft.game_dir" aria-label="游戏目录" /></label
+                    ><label class="check"
+                      ><input v-model="draft.isolated" type="checkbox" />版本隔离</label
+                    >
+                  </div>
+                  <div class="panel">
+                    <h2>游戏启动</h2>
+                    <div class="form-grid">
+                      <label
+                        >最大内存（MB）<input
+                          v-model.number="draft.memory"
+                          type="number"
+                          min="512"
+                          max="65536" /></label
+                      ><label
+                        >下载并发<input
+                          v-model.number="draft.download_threads"
+                          type="number"
+                          min="1"
+                          max="32" /></label
+                      ><label
+                        >窗口宽度<input
+                          v-model.number="draft.width"
+                          type="number"
+                          min="320"
+                          max="7680" /></label
+                      ><label
+                        >窗口高度<input
+                          v-model.number="draft.height"
+                          type="number"
+                          min="240"
+                          max="4320"
+                      /></label>
+                    </div>
+                    <label>Java 路径<input v-model="draft.java" placeholder="留空自动选择" /></label
+                    ><label>额外 JVM 参数<input v-model="draft.extra_jvm" /></label
+                    ><label class="check"
+                      ><input v-model="draft.fullscreen" type="checkbox" />全屏启动</label
+                    ><label class="check"
+                      ><input v-model="draft.auto_java" type="checkbox" />缺少 Java
+                      时自动下载</label
+                    >
+                  </div>
+                  <div class="panel">
+                    <h2>外观与动画</h2>
+                    <label class="check"
+                      ><input v-model="draft.dark_mode" type="checkbox" />深色主题</label
+                    ><label class="check"
+                      ><input
+                        v-model="draft.reduce_motion"
+                        type="checkbox"
+                      />减少动画和动态效果</label
+                    >
+                  </div>
+                  <button class="primary" type="submit"><Icon name="check" />保存设置</button>
+                </fieldset>
+              </form>
+            </template>
+            <template v-else-if="page === 'instance'">
+              <InstanceSettings
+                v-if="tab === 'settings' && data"
+                :config="data.config"
+                :busy="task.running"
+                :save="save"
+              />
+              <div v-if="tab === 'components'" class="panel">
+                <h2>游戏组件</h2>
+                <p>{{ current?.subtitle }}</p>
+                <div class="toolbar">
+                  <button
+                    :disabled="task.running"
+                    @click="data && start({ kind: 'fabric', id: data.config.selected })"
+                  >
+                    <img src="/hmcl/fabric.png" alt="" />安装 Fabric</button
+                  ><button
+                    :disabled="task.running"
+                    @click="data && start({ kind: 'quilt', id: data.config.selected })"
+                  >
+                    <img src="/hmcl/quilt.png" alt="" />安装 Quilt
+                  </button>
+                </div>
+                <p class="subtitle">Forge／NeoForge 安装尚未实现。</p>
+              </div>
+              <template v-if="tab === 'mods'"
+                ><div class="toolbar">
+                  <h1>模组管理</h1>
+                  <button :disabled="loading" @click="loadPage"><Icon name="refresh" />刷新</button>
+                </div>
+                <div class="list">
+                  <div v-for="mod in mods" :key="mod.name" class="list-row">
+                    <Icon name="extension" /><span
+                      ><b>{{ mod.name }}</b
+                      ><small>{{ (mod.size / 1024).toFixed(0) }} KB</small></span
+                    ><button :disabled="task.running" @click="toggleMod(mod.name)">
+                      {{ mod.enabled ? '禁用' : '启用' }}
+                    </button>
+                  </div>
+                </div>
+                <p v-if="!mods.length && !loading" class="empty">没有模组</p></template
+              >
+              <template v-if="tab === 'resources'"
+                ><div class="toolbar">
+                  <h1>资源包管理</h1>
+                  <button :disabled="loading" @click="loadPage"><Icon name="refresh" />刷新</button>
+                </div>
+                <div class="list">
+                  <div v-for="pack in packs" :key="pack.name" class="list-row">
+                    <input
+                      type="checkbox"
+                      :aria-label="`启用 ${pack.title}`"
+                      :checked="pack.enabled"
+                      :disabled="task.running"
+                      @click.prevent="togglePack(pack)"
+                    /><Icon name="texture" /><span
+                      ><b>{{ pack.title }}</b
+                      ><small>{{ pack.summary }}</small
+                      ><small v-if="pack.warning" class="warning">{{ pack.warning }}</small></span
+                    ><button
+                      class="icon-button"
+                      :aria-label="`${pack.title}详情`"
+                      @click="dialog = { title: pack.title, message: pack.description }"
+                    >
+                      <Icon name="info" />
+                    </button>
+                  </div>
+                </div>
+                <p v-if="!packs.length && !loading" class="empty">没有资源包</p></template
+              >
+            </template>
+            <template v-else-if="page === 'logs'"
+              ><h1>日志</h1>
+              <pre class="log-view">{{ task.logs.join('\n') || '暂无游戏输出' }}</pre>
+            </template>
+            <template v-else-if="page === 'about'"
+              ><div class="about">
+                <img src="/hmcl/logo.png" alt="HMCL" />
+                <h1>Rust HMCL</h1>
+                <p>Rust + Tauri + Vue / TypeScript</p>
+                <p>界面与功能正在对照 Hello Minecraft! Launcher 重构。</p>
+                <p>HMCL 图标及壁纸沿用原项目资源与许可。当前迁移尚未完成。</p>
+              </div></template
+            >
+          </section></Transition
+        >
+      </main>
+      <footer class="statusbar">
+        <Icon :name="task.running ? 'download' : 'check'" /><span role="status">{{
+          task.status || '准备就绪'
+        }}</span
+        ><template v-if="task.running"
+          ><progress :value="task.progress" max="1"></progress
+          ><button @click="stop">{{ task.game_running ? '结束游戏' : '取消' }}</button></template
+        >
+      </footer>
+    </div>
+    <div
+      v-if="dialog"
+      ref="modalElement"
+      class="modal-overlay"
+      @keydown.esc.stop="dialog = null"
+      @keydown.tab.prevent="trapTab"
+      tabindex="-1"
+    >
+      <section class="modal" role="dialog" aria-modal="true" :aria-label="dialog.title">
+        <h2>{{ dialog.title }}</h2>
+        <p>{{ dialog.message }}</p>
+        <div class="toolbar">
+          <button v-if="dialog.confirm" class="primary" @click="confirmDialog">确认</button
+          ><button @click="dialog = null">{{ dialog.confirm ? '取消' : '关闭' }}</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</template>

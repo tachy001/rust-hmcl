@@ -1,6 +1,8 @@
 # Rust HMCL 0.3.11
 
-参考 HMCL 的 Rust 原生桌面启动器。当前目录是独立的 Rust 项目根目录；本机参考用的原 Java 源码保留在相邻的 `../HMCL-main/`。启动器无需 Java 或 WebView，Minecraft 仍由单独的 Java 进程运行。
+参考 HMCL 的 Rust 桌面启动器，正在重构为 Rust + Tauri + Vue / TypeScript / CSS。启动器无需 Java，Minecraft 仍由独立 Java 进程运行。新界面使用系统 WebView；旧 egui 入口在迁移期间保留。本机参考 Java 源码位于相邻的 `../HMCL-main/`。
+
+Web 迁移说明、构建命令和未完成范围见 [docs/WEB-MIGRATION.md](docs/WEB-MIGRATION.md)。下列截图、资源包和命令行功能说明主要对应保留的 egui 版本，不能视为新 Web 界面已全部完成迁移。
 
 截图管理支持后台 72×72 缩略图、预览、图片复制、设为壁纸、多选与确认删除。离屏检查可用 `--render-ui output.png instance dark 1080 700 screenshots`，末尾追加 `preview` 或 `delete` 可检查对应弹窗，均不会实际删除文件或写入剪贴板。
 
@@ -15,6 +17,8 @@ rust-hmcl/
 ├── .github/workflows/  三端构建配置
 ├── assets/hmcl/        界面图标、壁纸、配色和来源说明
 ├── src/               Rust 启动器与单元测试
+├── src-tauri/         Tauri 桌面入口与命令注册
+├── frontend/          Vue / TypeScript / CSS 界面
 ├── vendor/egui/       控件库及分页输入门控补丁、上游许可证
 ├── dist/              本地发布包（Git 忽略）
 ├── Cargo.toml         项目与依赖配置

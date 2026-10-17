@@ -13,6 +13,9 @@
 
 ## 当前证据
 
+- 当前新增 Rust 共用核心 + Tauri 2 + Vue 3 / TypeScript / CSS 入口，旧 egui 入口在迁移期间保留。以下历史 egui 页面证据不能直接算作 Web 版本已还原。Web 已接入账户、全局与实例设置、版本、任务、Java、模组启禁用及资源包确认启禁用；截图、导入、多选等尚未迁移，完整范围见 `WEB-MIGRATION.md`。
+- 本轮 58 项本地 Rust 测试通过，4 项联网测试跳过。Web 类型检查、生产构建及 headless Edge → stdio → 真实 Rust Service 集成验证通过，涵盖设置持久化、实例继承且保留其他实例、未保存编辑、模组文件改名、资源包确认先于写入、过渡输入门控、焦点和减少动画。测试使用独立手工样本，未启动游戏或操作桌面；stdio 测试不能代替原生 Tauri IPC、窗口圆角及三端运行验收。
+
 - 未发布资源包选择更新对照 ResourcePackListCell 与 JavaFX MULTIPLE selection：左侧复选框绑定启用状态，行正文与 32 像素图标区域用于选择；Ctrl／Command 多选、Shift 连选、Esc 清除及右键单选详情已接入。56 项本地测试通过，4 项联网测试跳过；实际列表内存事件核验多选右键不打开详情、输入门控不改选择、弹窗存在时列表不消费 Esc，启用复选框不触发行选择，并保留不兼容包确认后才写设置的行为。浅色／800×560 深色未启用和启用预览已查看；只在独立 resource-description-proof 目录通过 CLI 修改了手工样本的 options.txt，预览未修改验证输入，配置、原始元数据、JAR 与样本字节保持不变。selection-preview-proof.json 记录了证据。文件定位按钮、完整键盘导航、选择背景细节及工具栏／复选框原版动画尚未完成，三端真实窗口仍待验证。
 
 - 未发布资源包文字更新已对照 PackMcMeta.PackInfoDeserializer、StringUtils.parseMinecraftColorCodes、LocalAddonFile.Description 和 ResourcePackInfoDialog：页面普通文字去掉格式代码，列表多行合并，详情保留换行与双击复制，显示标题与文件标识分别处理。55 项本地测试通过，4 项联网测试跳过；实际详情弹窗的内存双击事件输出精确 CopyText 命令，未操作系统剪贴板。使用 `../.tools/resource-description-proof/` 复制真实 1.20.1 元数据和客户端 JAR，资源包为手工样本；浅色列表、800×560 深色列表与详情预览已查看，preview-proof.json 记录输入字节不变。原版未在本轮实际运行，三端窗口和原生剪贴板仍待验证。

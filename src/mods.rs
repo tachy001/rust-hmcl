@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize)]
 pub struct ModFile {
     pub name: String,
     pub enabled: bool,

@@ -313,7 +313,7 @@ pub struct Pack {
     pub summary: String,
     pub compatibility: Compatibility,
     pub enabled: bool,
-    pub icon: Option<eframe::egui::ColorImage>,
+    pub icon: Option<image::RgbaImage>,
 }
 fn inspect(path: &Path, context: &ContextInfo, options: &Options) -> Result<Pack> {
     let attr = fs::symlink_metadata(path)?;
@@ -348,10 +348,7 @@ fn inspect(path: &Path, context: &ContextInfo, options: &Options) -> Result<Pack
         limits.max_alloc = Some(32 * 1024 * 1024);
         reader.limits(limits);
         let rgba = reader.decode().ok()?.thumbnail(64, 64).to_rgba8();
-        Some(eframe::egui::ColorImage::from_rgba_unmultiplied(
-            [rgba.width() as usize, rgba.height() as usize],
-            &rgba,
-        ))
+        Some(rgba)
     });
     let name = path
         .file_name()

@@ -294,7 +294,7 @@ impl Worker {
         self.status("游戏安装完成");
         Ok(())
     }
-    pub(crate) fn prepare(&self, root: &Path, id: &str, meta: &Value) -> Result<()> {
+    pub fn prepare(&self, root: &Path, id: &str, meta: &Value) -> Result<()> {
         let dir = version_dir(root, id)?;
         let client_id = meta["_clientVersion"].as_str().unwrap_or(id);
         let client_dir = version_dir(root, client_id)?;

@@ -565,7 +565,11 @@ impl Browser {
                 self.rows = packs
                     .into_iter()
                     .map(|mut pack| {
-                        let icon = pack.icon.take().map(|image| {
+                        let icon = pack.icon.take().map(|rgba| {
+                            let image = egui::ColorImage::from_rgba_unmultiplied(
+                                [rgba.width() as usize, rgba.height() as usize],
+                                &rgba,
+                            );
                             ctx.load_texture(
                                 format!("resourcepack:{}", pack.path.display()),
                                 image,

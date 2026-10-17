@@ -1,25 +1,19 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod appearance;
 mod avatars;
-mod catalog;
 mod cli;
-mod config;
-mod game;
-mod instance_ops;
 mod instance_ui;
-mod java_runtime;
-mod loaders;
-mod metadata;
-mod modpack;
-mod modrinth;
-mod mods;
 mod motion;
 mod preview;
 mod resourcepack_ui;
-mod resourcepacks;
 mod screenshots;
 mod theme;
 mod window_chrome;
+
+use rust_hmcl::{
+    catalog, config, game, instance_ops, java_runtime, loaders, metadata, modpack, modrinth, mods,
+    resourcepacks,
+};
 
 use config::Config;
 use eframe::egui::{self, Color32, RichText};
