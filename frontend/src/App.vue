@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, toRaw, watch } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import Icon from './Icon.vue';
+import Avatar from './Avatar.vue';
 import InstanceSettings from './InstanceSettings.vue';
 import {
   api,
@@ -52,8 +53,25 @@ const query = ref(''),
   snapshots = ref(false),
   username = ref(''),
   javaMajor = ref(21);
-const dialog = ref<{ title: string; message: string; confirm?: () => Promise<void> } | null>(null);
+interface InstancePrompt {
+  kind: 'duplicate' | 'rename';
+  id: string;
+  name: string;
+  copy_saves: boolean;
+  error: string;
+  pending: boolean;
+}
+const dialog = ref<{
+  title: string;
+  message: string;
+  confirm?: () => Promise<void>;
+  prompt?: InstancePrompt;
+} | null>(null);
+const instanceMenu = ref<{ id: string; x: number; y: number } | null>(null);
+const menuElement = ref<HTMLElement | null>(null);
+let menuTrigger: HTMLElement | null = null;
 const accountError = ref('');
+const settingsSaved = ref(false);
 const modalElement = ref<HTMLElement | null>(null);
 let previousFocus: HTMLElement | null = null;
 let timer: ReturnType<typeof setInterval> | undefined,
@@ -118,6 +136,9 @@ async function save(config: Config) {
     return false;
   }
 }
+async function saveSettings() {
+  if (draft.value) settingsSaved.value = await save(draft.value);
+}
 async function select(id: string) {
   if (!data.value) return false;
   const saved = await save({ ...data.value.config, selected: id });
@@ -129,6 +150,11 @@ async function start(job: Job) {
     error.value = '';
     await api.start(job);
     task.value = await api.task();
+    if (!task.value.running) {
+      await refresh();
+      await loadPage();
+      if (task.value.error) fail(task.value.error);
+    }
   } catch (cause) {
     fail(cause);
   }
@@ -143,6 +169,8 @@ async function theme() {
   if (data.value) await save({ ...data.value.config, dark_mode: !data.value.config.dark_mode });
 }
 function go(next: Page) {
+  closeInstanceMenu();
+  settingsSaved.value = false;
   page.value = next;
   query.value = '';
   menu.value = false;
@@ -195,17 +223,135 @@ watch(dialog, async (value) => {
   if (value) {
     previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     await nextTick();
-    modalElement.value?.querySelector<HTMLButtonElement>('button:last-child')?.focus();
+    const input = modalElement.value?.querySelector<HTMLInputElement>('input[type="text"]');
+    if (input) {
+      input.focus();
+      input.select();
+    } else modalElement.value?.querySelector<HTMLButtonElement>('button:last-child')?.focus();
   } else {
     await nextTick();
     previousFocus?.focus();
   }
 });
 function trapTab(event: KeyboardEvent) {
-  const buttons = [...(modalElement.value?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+  const buttons = [
+    ...(modalElement.value?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled)',
+    ) ?? []),
+  ];
   if (!buttons.length) return;
   const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
   buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length]?.focus();
+}
+function closeDialog() {
+  if (!dialog.value?.prompt?.pending) dialog.value = null;
+}
+async function openInstanceMenu(id: string, event: MouseEvent) {
+  if (task.value.running) return;
+  menuTrigger = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+  if (menuTrigger && !(menuTrigger instanceof HTMLButtonElement))
+    menuTrigger = menuTrigger.querySelector<HTMLButtonElement>('button:last-child');
+  const rect = menuTrigger?.getBoundingClientRect();
+  instanceMenu.value = {
+    id,
+    x: Math.max(
+      8,
+      Math.min(
+        event.type === 'contextmenu' ? event.clientX : (rect?.right ?? 240) - 240,
+        innerWidth - 248,
+      ),
+    ),
+    y: Math.max(
+      44,
+      Math.min(
+        event.type === 'contextmenu' ? event.clientY : (rect?.bottom ?? 44),
+        innerHeight - 228,
+      ),
+    ),
+  };
+  await nextTick();
+  menuElement.value?.querySelector<HTMLButtonElement>('button')?.focus();
+}
+function closeInstanceMenu() {
+  if (!instanceMenu.value) return;
+  instanceMenu.value = null;
+  menuTrigger?.focus();
+}
+function menuKey(event: KeyboardEvent) {
+  if (event.key === 'Escape' || event.key === 'Tab') {
+    event.preventDefault();
+    closeInstanceMenu();
+  } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    event.preventDefault();
+    const items = [...(menuElement.value?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const index =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? items.length - 1
+          : (current + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length;
+    items[index]?.focus();
+  }
+}
+function instanceAction(action: 'manage' | 'launch' | 'duplicate' | 'rename', id: string) {
+  closeInstanceMenu();
+  if (action === 'manage') {
+    void inspect(id);
+    return;
+  }
+  if (action === 'launch') {
+    void launch(id);
+    return;
+  }
+  dialog.value = {
+    title: action === 'duplicate' ? '复制实例' : '重命名实例',
+    message:
+      action === 'duplicate'
+        ? `复制“${id}”的设置和游戏文件。副本使用独立游戏目录，原实例保持不变。`
+        : `为“${id}”输入新名称。存档和实例设置将随实例保留。`,
+    prompt: { kind: action, id, name: id, copy_saves: false, error: '', pending: false },
+  };
+}
+async function submitInstance() {
+  const prompt = dialog.value?.prompt;
+  if (!prompt || prompt.pending) return;
+  const stem = prompt.name.split('.')[0]?.toUpperCase() ?? '';
+  if (
+    !prompt.name ||
+    prompt.name.length > 100 ||
+    /[<>:"/\\|?*\u0000-\u001f\u007f]/.test(prompt.name) ||
+    /[. ]$/.test(prompt.name) ||
+    /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(stem)
+  ) {
+    prompt.error = '实例名称应为 1–100 字，不能使用路径符号、系统保留名称或以点、空格结尾。';
+    return;
+  }
+  if (prompt.name === prompt.id || data.value?.instances.some((item) => item.id === prompt.name)) {
+    prompt.error =
+      prompt.name === prompt.id ? '新名称与原名称相同。' : '同名实例已存在，不能覆盖。';
+    return;
+  }
+  prompt.pending = true;
+  prompt.error = '';
+  try {
+    await api.start(
+      prompt.kind === 'duplicate'
+        ? { kind: 'duplicate', id: prompt.id, name: prompt.name, copy_saves: prompt.copy_saves }
+        : { kind: 'rename', id: prompt.id, name: prompt.name },
+    );
+    task.value = await api.task();
+    dialog.value = null;
+    if (!task.value.running) {
+      await refresh();
+      await loadPage();
+      if (task.value.error) fail(task.value.error);
+    }
+  } catch (cause) {
+    prompt.error = String(cause);
+  } finally {
+    prompt.pending = false;
+  }
 }
 async function account() {
   if (!data.value) return;
@@ -366,13 +512,28 @@ onUnmounted(() => {
             <Icon :name="item[1]" /><span>{{ item[2] }}</span>
           </button>
           <div class="nav-spacer"></div>
+          <button
+            :disabled="task.running || !current"
+            @click="current && instanceAction('rename', current.id)"
+          >
+            <Icon name="edit" /><span>重命名实例</span>
+          </button>
+          <button
+            :disabled="task.running || !current"
+            @click="current && instanceAction('duplicate', current.id)"
+          >
+            <Icon name="folder_copy" /><span>复制实例</span>
+          </button>
           <button :disabled="task.running" @click="launch()">
-            <Icon name="gamepad" /><span>测试游戏</span></button
+            <Icon name="rocket_launch" /><span>测试游戏</span></button
           ><button @click="go('versions')"><Icon name="folder" /><span>返回游戏列表</span></button>
         </template>
         <template v-else>
           <button class="account-nav" @click="go('accounts')">
-            <Icon name="person" /><span
+            <Avatar v-if="data" :skin="data.avatars[data.config.player] ?? 'wide/steve'" /><Icon
+              v-else
+              name="person"
+            /><span
               ><b>{{ data?.config.player ?? '账户' }}</b
               ><small>离线账户</small></span
             >
@@ -387,7 +548,7 @@ onUnmounted(() => {
             <Icon :name="item[1]" /><span>{{ item[2] }}</span>
           </button>
           <div class="nav-spacer"></div>
-          <div class="sidebar-footer">Rust HMCL <small>0.3.11 · Web 界面迁移中</small></div>
+          <div class="sidebar-footer">Rust HMCL <small>0.3.11</small></div>
         </template>
       </aside>
       <main class="content" :class="{ home: page === 'home' }">
@@ -456,7 +617,7 @@ onUnmounted(() => {
                   :disabled="task.running"
                   @click="data && save({ ...data.config, player: name })"
                 >
-                  <Icon name="person" /><span
+                  <Avatar :skin="data?.avatars[name] ?? 'wide/steve'" /><span
                     ><b>{{ name }}</b
                     ><small>离线账户</small></span
                   ><Icon v-if="name === data?.config.player" name="check" />
@@ -496,6 +657,7 @@ onUnmounted(() => {
                   :key="instance.id"
                   class="list-row"
                   :class="{ active: instance.id === data?.config.selected }"
+                  @contextmenu.prevent="openInstanceMenu(instance.id, $event)"
                 >
                   <input
                     type="radio"
@@ -517,14 +679,23 @@ onUnmounted(() => {
                     :disabled="task.running"
                     @click="launch(instance.id)"
                   >
-                    <Icon name="gamepad" /></button
+                    <Icon name="rocket_launch" /></button
                   ><button
                     class="icon-button"
                     :aria-label="`管理 ${instance.id}`"
                     :disabled="task.running"
                     @click="inspect(instance.id)"
                   >
-                    <Icon name="settings" />
+                    <Icon name="settings" /></button
+                  ><button
+                    class="icon-button"
+                    :aria-label="`${instance.id}更多操作`"
+                    aria-haspopup="menu"
+                    :aria-expanded="instanceMenu?.id === instance.id"
+                    :disabled="task.running"
+                    @click="openInstanceMenu(instance.id, $event)"
+                  >
+                    <Icon name="more_vert" />
                   </button>
                 </div>
               </div>
@@ -610,12 +781,16 @@ onUnmounted(() => {
             </template>
             <template v-else-if="page === 'settings' && draft">
               <h1>启动器设置</h1>
-              <form @submit.prevent="save(draft!)">
+              <form
+                @submit.prevent="saveSettings"
+                @input="settingsSaved = false"
+                @change="settingsSaved = false"
+              >
                 <fieldset :disabled="task.running">
                   <div class="panel">
                     <h2>游戏目录</h2>
                     <label>目录路径<input v-model="draft.game_dir" aria-label="游戏目录" /></label
-                    ><label class="check"
+                    ><label class="switch-row"
                       ><input v-model="draft.isolated" type="checkbox" />版本隔离</label
                     >
                   </div>
@@ -650,25 +825,30 @@ onUnmounted(() => {
                     </div>
                     <label>Java 路径<input v-model="draft.java" placeholder="留空自动选择" /></label
                     ><label>额外 JVM 参数<input v-model="draft.extra_jvm" /></label
-                    ><label class="check"
+                    ><label class="switch-row"
                       ><input v-model="draft.fullscreen" type="checkbox" />全屏启动</label
-                    ><label class="check"
+                    ><label class="switch-row"
                       ><input v-model="draft.auto_java" type="checkbox" />缺少 Java
                       时自动下载</label
                     >
                   </div>
                   <div class="panel">
                     <h2>外观与动画</h2>
-                    <label class="check"
+                    <label class="switch-row"
                       ><input v-model="draft.dark_mode" type="checkbox" />深色主题</label
-                    ><label class="check"
+                    ><label class="switch-row"
                       ><input
                         v-model="draft.reduce_motion"
                         type="checkbox"
                       />减少动画和动态效果</label
                     >
                   </div>
-                  <button class="primary" type="submit"><Icon name="check" />保存设置</button>
+                  <div class="form-actions">
+                    <button class="primary" type="submit"><Icon name="check" />保存设置</button>
+                    <span v-if="settingsSaved" class="saved-message" role="status"
+                      ><Icon name="check" />设置已保存</span
+                    >
+                  </div>
                 </fieldset>
               </form>
             </template>
@@ -770,21 +950,84 @@ onUnmounted(() => {
       </footer>
     </div>
     <div
-      v-if="dialog"
-      ref="modalElement"
-      class="modal-overlay"
-      @keydown.esc.stop="dialog = null"
-      @keydown.tab.prevent="trapTab"
-      tabindex="-1"
+      v-if="instanceMenu"
+      class="menu-backdrop"
+      @pointerdown.prevent="closeInstanceMenu"
+      @contextmenu.prevent="closeInstanceMenu"
+    ></div>
+    <Transition name="popup" appear>
+      <div
+        v-if="instanceMenu"
+        ref="menuElement"
+        class="instance-popup"
+        role="menu"
+        :aria-label="`${instanceMenu.id}操作`"
+        :style="{ left: `${instanceMenu.x}px`, top: `${instanceMenu.y}px` }"
+        @keydown="menuKey"
+      >
+        <button role="menuitem" @click="instanceAction('launch', instanceMenu.id)">
+          <Icon name="rocket_launch" />测试游戏
+        </button>
+        <button role="menuitem" @click="instanceAction('manage', instanceMenu.id)">
+          <Icon name="settings" />游戏管理
+        </button>
+        <div class="nav-divider"></div>
+        <button role="menuitem" @click="instanceAction('rename', instanceMenu.id)">
+          <Icon name="edit" />重命名实例
+        </button>
+        <button role="menuitem" @click="instanceAction('duplicate', instanceMenu.id)">
+          <Icon name="folder_copy" />复制实例
+        </button>
+      </div>
+    </Transition>
+    <Transition name="dialog"
+      ><div
+        v-if="dialog"
+        ref="modalElement"
+        class="modal-overlay"
+        @keydown.esc.stop="closeDialog"
+        @keydown.tab.prevent="trapTab"
+        tabindex="-1"
+      >
+        <section class="modal" role="dialog" aria-modal="true" :aria-label="dialog.title">
+          <h2>{{ dialog.title }}</h2>
+          <p>{{ dialog.message }}</p>
+          <form v-if="dialog.prompt" @submit.prevent="submitInstance">
+            <label class="prompt-field"
+              >新实例名称<input
+                v-model="dialog.prompt.name"
+                @input="dialog.prompt.error = ''"
+                type="text"
+                aria-label="新实例名称"
+                maxlength="100"
+                :disabled="dialog.prompt.pending"
+                :aria-invalid="!!dialog.prompt.error"
+                aria-describedby="instance-name-error"
+            /></label>
+            <label v-if="dialog.prompt.kind === 'duplicate'" class="check"
+              ><input
+                v-model="dialog.prompt.copy_saves"
+                type="checkbox"
+                :disabled="dialog.prompt.pending"
+              />复制存档</label
+            >
+            <p v-if="dialog.prompt.error" id="instance-name-error" role="alert" class="field-error">
+              {{ dialog.prompt.error }}
+            </p>
+            <div class="toolbar">
+              <button type="submit" class="primary" :disabled="dialog.prompt.pending">
+                {{ dialog.prompt.pending ? '正在提交…' : '确认' }}</button
+              ><button type="button" :disabled="dialog.prompt.pending" @click="closeDialog">
+                取消
+              </button>
+            </div>
+          </form>
+          <div v-else class="toolbar">
+            <button v-if="dialog.confirm" class="primary" @click="confirmDialog">确认</button
+            ><button @click="closeDialog">{{ dialog.confirm ? '取消' : '关闭' }}</button>
+          </div>
+        </section>
+      </div></Transition
     >
-      <section class="modal" role="dialog" aria-modal="true" :aria-label="dialog.title">
-        <h2>{{ dialog.title }}</h2>
-        <p>{{ dialog.message }}</p>
-        <div class="toolbar">
-          <button v-if="dialog.confirm" class="primary" @click="confirmDialog">确认</button
-          ><button @click="dialog = null">{{ dialog.confirm ? '取消' : '关闭' }}</button>
-        </div>
-      </section>
-    </div>
   </div>
 </template>

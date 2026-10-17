@@ -13,3 +13,4 @@ pub mod mods;
 pub mod resourcepacks;
 pub mod service;
 pub use config::Config;
+pub mod avatars;

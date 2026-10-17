@@ -29,6 +29,9 @@ await writeFile(
   }),
 );
 await writeFile(join(game, 'mods', 'sample.jar'), 'handwritten listing fixture; never launched');
+await mkdir(join(game, 'saves', 'UI World'), { recursive: true });
+await writeFile(join(game, 'saves', 'UI World', 'level.dat'), 'handwritten world fixture');
+await writeFile(join(version, '1.20.1.jar'), 'handwritten client fixture; never launched');
 await writeFile(
   join(fixture, 'config.json'),
   JSON.stringify({
@@ -131,7 +134,7 @@ try {
     reducedMotion: 'no-preference',
   });
   await context.exposeBinding('__hmclInvoke', async (_source, command, args) => {
-    if (command === 'start_job')
+    if (command === 'start_job' && !['duplicate', 'rename'].includes(args?.job?.kind))
       throw Error('Headless UI verification never starts Java, games, downloads or installers.');
     return rpc(command, args ?? {});
   });
@@ -181,12 +184,42 @@ try {
   );
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
+  const isolationSwitch = page.getByRole('checkbox', { name: '版本隔离', exact: true });
+  assert.equal(
+    await isolationSwitch.evaluate(
+      (element) => getComputedStyle(element, '::before').transitionDuration,
+    ),
+    '0.2s, 0.2s',
+  );
+  await isolationSwitch.uncheck();
+  await expect(isolationSwitch).not.toBeChecked();
+  await settle();
+  await isolationSwitch.check();
+  const switchMotion = await isolationSwitch.evaluate((element) => {
+    const animation = element
+      .getAnimations({ subtree: true })
+      .find((item) => item.transitionProperty === 'transform');
+    if (!animation) throw new Error('Switch thumb has no active transform transition');
+    animation.pause();
+    const frames = [0, 100, 200].map((time) => {
+      animation.currentTime = time;
+      return new DOMMatrix(getComputedStyle(element, '::before').transform).m41;
+    });
+    animation.finish();
+    return frames;
+  });
+  assert.equal(switchMotion[0], 0);
+  assert.ok(switchMotion[1] > 0 && switchMotion[1] < 20);
+  assert.equal(switchMotion[2], 20);
   await page.getByLabel('最大内存（MB）', { exact: true }).fill('3072');
   await expect(page.getByLabel('最大内存（MB）', { exact: true })).toHaveValue('3072');
   await page.getByRole('button', { name: '保存设置', exact: true }).click();
   await expect
     .poll(async () => JSON.parse(await readFile(join(fixture, 'config.json'), 'utf8')).memory)
     .toBe(3072);
+  await expect(page.getByText('设置已保存', { exact: true })).toBeVisible();
+  await settle();
+  await page.screenshot({ path: join(output, 'settings-light.png') });
   await page.getByRole('button', { name: '切换主题', exact: true }).click();
   await expect(page.locator('.launcher')).toHaveClass(/dark/);
   await page.locator('.page').evaluate((element) => (element.scrollTop = 0));
@@ -268,6 +301,12 @@ try {
   await page.getByRole('checkbox', { name: '减少动画和动态效果', exact: true }).check();
   await page.getByRole('button', { name: '保存设置', exact: true }).click();
   await expect(page.locator('.launcher')).toHaveClass(/reduced/);
+  assert.equal(
+    await isolationSwitch.evaluate(
+      (element) => getComputedStyle(element, '::before').transitionDuration,
+    ),
+    '0s',
+  );
   await page.getByRole('button', { name: '游戏列表', exact: true }).click();
   await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
   assert.equal(
@@ -286,6 +325,110 @@ try {
     .toBe(true);
   await expect(page.getByRole('alert')).toBeVisible();
   assert.equal((await rpc('snapshot')).instances.length, 1);
+  await page.getByRole('button', { name: '关闭提示', exact: true }).click();
+  let beforeCopy = await rpc('snapshot');
+  await rpc('update_config', {
+    config: {
+      ...beforeCopy.config,
+      favorites: ['1.20.1'],
+      version_settings: { ...beforeCopy.config.version_settings, '1.20.1': { memory: 4096 } },
+    },
+  });
+  await page.getByRole('button', { name: '刷新', exact: true }).click();
+  const more = page.getByRole('button', { name: '1.20.1更多操作', exact: true });
+  await more.click();
+  await settle();
+  await page.screenshot({ path: join(output, 'instance-menu-dark-narrow.png') });
+  await expect(page.getByRole('menuitem', { name: '测试游戏', exact: true })).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(page.getByRole('menuitem', { name: '复制实例', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(more).toBeFocused();
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await more.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '复制实例', exact: true }).click();
+  const nameInput = page.getByRole('textbox', { name: '新实例名称', exact: true });
+  await expect(nameInput).toBeFocused();
+  await expect(page.getByRole('checkbox', { name: '复制存档', exact: true })).not.toBeChecked();
+  await page.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(page.getByText('新名称与原名称相同。', { exact: true })).toBeVisible();
+  await nameInput.fill('../bad');
+  await page.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(nameInput).toHaveAttribute('aria-invalid', 'true');
+  await nameInput.fill('copied-no-worlds');
+  await settle();
+  await page.screenshot({ path: join(output, 'copy-dialog-dark-narrow.png') });
+  await page.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText('copied-no-worlds', { exact: true })).toBeVisible();
+  const noWorlds = join(fixture, 'minecraft', 'versions', 'copied-no-worlds');
+  await assert.rejects(stat(join(noWorlds, 'game', 'saves')));
+  assert.deepEqual(
+    await readFile(join(noWorlds, 'game', 'mods', 'sample.jar')),
+    await readFile(join(game, 'mods', 'sample.jar')),
+  );
+  let afterCopy = await rpc('snapshot');
+  assert.equal(afterCopy.config.selected, 'copied-no-worlds');
+  assert.equal(afterCopy.config.version_settings['copied-no-worlds'].memory, 4096);
+  assert.equal(afterCopy.config.version_settings['copied-no-worlds'].isolated, true);
+  assert.ok(afterCopy.config.favorites.includes('copied-no-worlds'));
+  await more.click();
+  await page.getByRole('menuitem', { name: '复制实例', exact: true }).click();
+  await nameInput.fill('copied-with-worlds');
+  await page.getByRole('checkbox', { name: '复制存档', exact: true }).check();
+  await page.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(page.getByText('copied-with-worlds', { exact: true })).toBeVisible();
+  assert.deepEqual(
+    await readFile(
+      join(
+        fixture,
+        'minecraft',
+        'versions',
+        'copied-with-worlds',
+        'game',
+        'saves',
+        'UI World',
+        'level.dat',
+      ),
+    ),
+    await readFile(join(game, 'saves', 'UI World', 'level.dat')),
+  );
+  const dependent = join(fixture, 'minecraft', 'versions', 'dependent');
+  await mkdir(dependent);
+  await writeFile(
+    join(dependent, 'dependent.json'),
+    JSON.stringify({ id: 'dependent', inheritsFrom: 'copied-no-worlds', libraries: [] }),
+  );
+  await page.getByRole('button', { name: 'copied-no-worlds更多操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '重命名实例', exact: true }).click();
+  await nameInput.fill('renamed-ui');
+  await page.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(page.getByText('renamed-ui', { exact: true })).toBeVisible();
+  await assert.rejects(stat(noWorlds));
+  afterCopy = await rpc('snapshot');
+  assert.equal(afterCopy.config.selected, 'renamed-ui');
+  assert.equal(afterCopy.config.version_settings['renamed-ui'].memory, 4096);
+  assert.equal(afterCopy.config.version_settings['copied-no-worlds'], undefined);
+  assert.ok(afterCopy.config.favorites.includes('renamed-ui'));
+  assert.ok(!afterCopy.config.favorites.includes('copied-no-worlds'));
+  assert.equal(
+    JSON.parse(await readFile(join(dependent, 'dependent.json'), 'utf8')).inheritsFrom,
+    'renamed-ui',
+  );
+  assert.equal(afterCopy.config.version_settings.untouched.memory, 8192);
+  assert.equal(
+    await readFile(join(version, '1.20.1.jar'), 'utf8'),
+    'handwritten client fixture; never launched',
+  );
+  await page.getByRole('button', { name: 'renamed-ui更多操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '重命名实例', exact: true }).click();
+  await nameInput.fill('1.20.1');
+  await page.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(page.getByText('同名实例已存在，不能覆盖。', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await page.setViewportSize({ width: 1080, height: 700 });
+  await settle();
+  await page.screenshot({ path: join(output, 'instances-dark.png') });
   assert.deepEqual(failures, []);
   await writeFile(
     join(output, 'proof.json'),
@@ -314,8 +457,14 @@ try {
           '800px layout',
           'reduced motion persists and removes transition duration',
           'failed background task clears busy state and displays error',
+          'instance context menu keyboard navigation and focus restoration',
+          'duplicate defaults to no saved worlds; opt-in copies exact world bytes',
+          'duplicate and rename preserve settings, favorites, original files and dependent inheritance',
+          'invalid and conflicting instance names leave dialog open and never overwrite',
+          'custom switch interaction and pseudo-element motion honor reduced animation settings',
         ],
         animation,
+        switchMotion,
       },
       null,
       2,

@@ -43,6 +43,7 @@ export interface Config {
 export interface Snapshot {
   config: Config;
   instances: Instance[];
+  avatars: Record<string, string>;
 }
 export interface Task {
   id: number;
@@ -84,7 +85,8 @@ export interface Pack {
 export type Job =
   | { kind: 'launch' | 'install' | 'repair' | 'fabric' | 'quilt'; id: string }
   | { kind: 'java'; major: number }
-  | { kind: 'duplicate' | 'rename'; id: string; name: string };
+  | { kind: 'rename'; id: string; name: string }
+  | { kind: 'duplicate'; id: string; name: string; copy_saves: boolean };
 export const api = {
   snapshot: () => invoke<Snapshot>('snapshot'),
   save: (config: Config) => invoke<Snapshot>('update_config', { config }),

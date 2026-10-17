@@ -28,6 +28,7 @@ pub struct Instance {
 pub struct Snapshot {
     pub config: Config,
     pub instances: Vec<Instance>,
+    pub avatars: std::collections::BTreeMap<String, String>,
 }
 #[derive(Clone, Default, Serialize)]
 pub struct Task {
@@ -42,14 +43,34 @@ pub struct Task {
 #[derive(Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Job {
-    Launch { id: String },
-    Install { id: String },
-    Repair { id: String },
-    Java { major: u32 },
-    Fabric { id: String },
-    Quilt { id: String },
-    Duplicate { id: String, name: String },
-    Rename { id: String, name: String },
+    Launch {
+        id: String,
+    },
+    Install {
+        id: String,
+    },
+    Repair {
+        id: String,
+    },
+    Java {
+        major: u32,
+    },
+    Fabric {
+        id: String,
+    },
+    Quilt {
+        id: String,
+    },
+    Duplicate {
+        id: String,
+        name: String,
+        #[serde(default)]
+        copy_saves: bool,
+    },
+    Rename {
+        id: String,
+        name: String,
+    },
 }
 #[derive(Serialize)]
 pub struct ResourcePack {
@@ -102,7 +123,17 @@ impl Service {
                 }
             })
             .collect();
-        Ok(Snapshot { config, instances })
+        let avatars = config
+            .accounts
+            .iter()
+            .chain(std::iter::once(&config.player))
+            .map(|player| (player.clone(), crate::avatars::skin(player).0.to_owned()))
+            .collect();
+        Ok(Snapshot {
+            config,
+            instances,
+            avatars,
+        })
     }
     pub fn task(&self) -> Result<Task> {
         Ok(self
@@ -230,9 +261,16 @@ impl Service {
                     bail!("Java 主版本应在 8–99 之间");
                 }
             }
-            Job::Duplicate { id, name } | Job::Rename { id, name } => {
+            Job::Duplicate { id, name, .. } | Job::Rename { id, name } => {
                 game::version_dir(Path::new(&config.game_dir), id)?;
-                game::version_dir(Path::new(&config.game_dir), name)?;
+                crate::instance_ops::validate_name(name)?;
+                if id == name {
+                    bail!("新名称与原名称相同");
+                }
+                let destination = game::version_dir(Path::new(&config.game_dir), name)?;
+                if std::fs::symlink_metadata(destination).is_ok() {
+                    bail!("同名实例已存在，不能覆盖");
+                }
             }
             Job::Launch { id }
             | Job::Install { id }
@@ -315,9 +353,20 @@ impl Service {
                     config.selected =
                         worker.install_loader(root, &id, Loader::Quilt, None, None)?;
                 }
-                Job::Duplicate { id, name } => {
-                    crate::instance_ops::duplicate(root, &id, &name, &self.cancel)?;
+                Job::Duplicate {
+                    id,
+                    name,
+                    copy_saves,
+                } => {
+                    crate::instance_ops::duplicate_config(
+                        &config,
+                        &id,
+                        &name,
+                        copy_saves,
+                        &self.cancel,
+                    )?;
                     config.remap_instance(&id, &name, false);
+                    config.version_settings.entry(name).or_default().isolated = Some(true);
                 }
                 Job::Rename { id, name } => {
                     crate::instance_ops::rename(root, &id, &name, &self.cancel)?;

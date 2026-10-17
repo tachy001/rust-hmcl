@@ -110,6 +110,114 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 pub fn duplicate(root: &Path, old: &str, new: &str, cancel: &AtomicBool) -> Result<()> {
+    duplicate_inner(root, old, new, cancel, None)
+}
+
+/// Copy the effective run directory into an isolated instance, as HMCL does.
+pub fn duplicate_config(
+    config: &crate::config::Config,
+    old: &str,
+    new: &str,
+    copy_saves: bool,
+    cancel: &AtomicBool,
+) -> Result<()> {
+    let mut source_config = config.clone();
+    source_config.selected = old.into();
+    let game = crate::game::instance_dir(&source_config)?;
+    duplicate_inner(
+        Path::new(&config.game_dir),
+        old,
+        new,
+        cancel,
+        Some((&game, copy_saves)),
+    )
+}
+
+// Mirrors ModAdviser.MODPACK_BLACK_LIST; shared assets and launcher credentials
+// must never be copied into the isolated run directory.
+fn excluded_from_copy(relative: &Path, copy_saves: bool) -> bool {
+    let path = relative.to_string_lossy().replace('\\', "/");
+    const EXCLUDED: &[&str] = &[
+        "usernamecache.json",
+        "usercache.json",
+        "launcher_profiles.json",
+        "launcher.pack.lzma",
+        "launcher_accounts.json",
+        "launcher_cef_log.txt",
+        "launcher_log.txt",
+        "launcher_msa_credentials.bin",
+        "launcher_settings.json",
+        "launcher_ui_state.json",
+        "realms_persistence.json",
+        "webcache2",
+        "treatment_tags.json",
+        "clientId.txt",
+        "PCL.ini",
+        ".hmcl",
+        "backup",
+        "pack.json",
+        "launcher.jar",
+        "cache",
+        "modpack.cfg",
+        "log4j2.xml",
+        "hmclversion.cfg",
+        "instance-game-settings.json",
+        "manifest.json",
+        "minecraftinstance.json",
+        ".curseclient",
+        "modrinth.index.json",
+        ".fabric",
+        ".mixin.out",
+        ".optifine",
+        "jars",
+        "logs",
+        "versions",
+        "assets",
+        "libraries",
+        "crash-reports",
+        "NVIDIA",
+        "AMD",
+        "screenshots",
+        "natives",
+        "native",
+        "$native",
+        "$natives",
+        "server-resource-packs",
+        "command_history.txt",
+        "downloads",
+        "essential",
+        "asm",
+        "backups",
+        "TCNodeTracker",
+        "CustomDISkins",
+        "data",
+        "CustomSkinLoader/caches",
+        "debug",
+        ".replay_cache",
+        "replay_recordings",
+        "replay_videos",
+        "irisUpdateInfo.json",
+        "modernfix",
+        "modtranslations",
+        "journeymap/data",
+        "mods/.connector",
+    ];
+    (!copy_saves && (path == "saves" || path.starts_with("saves/")))
+        || EXCLUDED
+            .iter()
+            .any(|item| path == *item || path.starts_with(&format!("{item}/")))
+        || [".log", ".dat_old", ".old", ".BakaCoreInfo", "-natives"]
+            .iter()
+            .any(|suffix| path.ends_with(suffix))
+}
+
+fn duplicate_inner(
+    root: &Path,
+    old: &str,
+    new: &str,
+    cancel: &AtomicBool,
+    run_directory: Option<(&Path, bool)>,
+) -> Result<()> {
     let (versions, source, destination) = paths(root, old, new)?;
     check(cancel)?;
     let stage = versions.join(format!(
@@ -129,6 +237,11 @@ pub fn duplicate(root: &Path, old: &str, new: &str, cancel: &AtomicBool) -> Resu
                 );
             }
             let relative = entry.path().strip_prefix(&source)?;
+            if let Some((_, copy_saves)) = run_directory {
+                if relative.starts_with("game") || excluded_from_copy(relative, copy_saves) {
+                    continue;
+                }
+            }
             let target = stage.join(relative);
             if entry.file_type().is_dir() {
                 fs::create_dir_all(&target)?;
@@ -151,6 +264,11 @@ pub fn duplicate(root: &Path, old: &str, new: &str, cancel: &AtomicBool) -> Resu
             }
             fs::set_permissions(&target, entry.metadata()?.permissions())?;
         }
+        if let Some((game, copy_saves)) = run_directory {
+            if game.exists() {
+                copy_run_directory(game, &stage.join("game"), copy_saves, cancel)?;
+            }
+        }
         let old_profile = stage.join(format!("{old}.json"));
         let bytes = rewrite(&fs::read(&old_profile)?, old, new, true)?;
         let new_profile = stage.join(format!("{new}.json"));
@@ -172,6 +290,58 @@ pub fn duplicate(root: &Path, old: &str, new: &str, cancel: &AtomicBool) -> Resu
         cleanup_stage(&stage, &versions)?;
     }
     result
+}
+
+fn copy_run_directory(
+    source: &Path,
+    target: &Path,
+    copy_saves: bool,
+    cancel: &AtomicBool,
+) -> Result<()> {
+    if fs::symlink_metadata(source)?.file_type().is_symlink() {
+        bail!("暂不支持复制链接形式的游戏目录");
+    }
+    fs::create_dir_all(target)?;
+    let entries = walkdir::WalkDir::new(source)
+        .min_depth(1)
+        .into_iter()
+        .filter_entry(|entry| {
+            entry
+                .path()
+                .strip_prefix(source)
+                .is_ok_and(|path| !excluded_from_copy(path, copy_saves))
+        });
+    for entry in entries {
+        check(cancel)?;
+        let entry = entry?;
+        if entry.file_type().is_symlink()
+            || !(entry.file_type().is_dir() || entry.file_type().is_file())
+        {
+            bail!("游戏目录含链接或特殊文件，未完成复制");
+        }
+        let destination = target.join(entry.path().strip_prefix(source)?);
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&destination)?;
+        } else {
+            fs::create_dir_all(destination.parent().context("复制路径缺少目录")?)?;
+            let mut input = fs::File::open(entry.path())?;
+            let mut output = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&destination)?;
+            let mut buffer = [0u8; 65536];
+            loop {
+                check(cancel)?;
+                let count = input.read(&mut buffer)?;
+                if count == 0 {
+                    break;
+                }
+                output.write_all(&buffer[..count])?;
+            }
+            fs::set_permissions(&destination, entry.metadata()?.permissions())?;
+        }
+    }
+    Ok(())
 }
 fn remove_owned_file(path: &Path) -> Result<()> {
     #[cfg(windows)]
@@ -359,6 +529,81 @@ mod tests {
         assert_eq!(meta["_clientVersion"], "copied");
         assert_eq!(meta["custom"]["keep"], "value");
         assert!(duplicate(&fixture.root, "base", "copied", &AtomicBool::new(false)).is_err());
+    }
+    #[test]
+    fn configured_duplicate_filters_runtime_files_and_optionally_copies_saved_worlds() {
+        let fixture = Fixture::new("configured-copy");
+        fixture.profile("base", None);
+        let game = fixture.root.join("versions/base/game");
+        fs::create_dir_all(game.join("saves/World")).unwrap();
+        fs::write(game.join("saves/World/level.dat"), b"world-bytes").unwrap();
+        fs::create_dir(game.join("mods")).unwrap();
+        fs::write(game.join("mods/example.jar"), b"mod-bytes").unwrap();
+        fs::create_dir(game.join("logs")).unwrap();
+        fs::write(game.join("logs/latest.log"), b"private-log").unwrap();
+        fs::write(game.join("options.txt"), b"fov:0.5\n").unwrap();
+        let config = crate::config::Config {
+            game_dir: fixture.root.to_string_lossy().into_owned(),
+            isolated: true,
+            ..Default::default()
+        };
+        let cancel = AtomicBool::new(false);
+        duplicate_config(&config, "base", "without-worlds", false, &cancel).unwrap();
+        duplicate_config(&config, "base", "with-worlds", true, &cancel).unwrap();
+        let without = fixture.root.join("versions/without-worlds/game");
+        let with = fixture.root.join("versions/with-worlds/game");
+        assert!(!without.join("saves").exists());
+        assert!(!with.join("logs").exists());
+        assert_eq!(
+            fs::read(with.join("saves/World/level.dat")).unwrap(),
+            b"world-bytes"
+        );
+        assert_eq!(
+            fs::read(without.join("mods/example.jar")).unwrap(),
+            b"mod-bytes"
+        );
+        assert_eq!(fs::read(without.join("options.txt")).unwrap(), b"fov:0.5\n");
+        assert_eq!(
+            fs::read(game.join("saves/World/level.dat")).unwrap(),
+            b"world-bytes"
+        );
+    }
+    #[test]
+    fn shared_game_directory_is_copied_without_shared_libraries_credentials_or_recursive_versions()
+    {
+        let fixture = Fixture::new("shared-copy");
+        fixture.profile("base", None);
+        fs::create_dir(fixture.root.join("mods")).unwrap();
+        fs::write(fixture.root.join("mods/shared.jar"), b"shared-mod").unwrap();
+        fs::write(fixture.root.join("launcher_accounts.json"), b"not-for-copy").unwrap();
+        fs::create_dir(fixture.root.join("libraries")).unwrap();
+        fs::write(
+            fixture.root.join("libraries/library.jar"),
+            b"shared-library",
+        )
+        .unwrap();
+        let config = crate::config::Config {
+            game_dir: fixture.root.to_string_lossy().into_owned(),
+            isolated: false,
+            ..Default::default()
+        };
+        duplicate_config(
+            &config,
+            "base",
+            "shared-copy",
+            false,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        let game = fixture.root.join("versions/shared-copy/game");
+        assert_eq!(
+            fs::read(game.join("mods/shared.jar")).unwrap(),
+            b"shared-mod"
+        );
+        assert!(!game.join("versions").exists());
+        assert!(!game.join("libraries").exists());
+        assert!(!game.join("launcher_accounts.json").exists());
+        assert!(!game.join("level.dat").exists()); // Old inactive isolated directory is not the effective run directory.
     }
     #[test]
     fn rename_updates_inheritance_and_retains_saves() {

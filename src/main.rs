@@ -1,6 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod appearance;
-mod avatars;
 mod cli;
 mod instance_ui;
 mod motion;
@@ -11,8 +10,8 @@ mod theme;
 mod window_chrome;
 
 use rust_hmcl::{
-    catalog, config, game, instance_ops, java_runtime, loaders, metadata, modpack, modrinth, mods,
-    resourcepacks,
+    avatars, catalog, config, game, instance_ops, java_runtime, loaders, metadata, modpack,
+    modrinth, mods, resourcepacks,
 };
 
 use config::Config;
