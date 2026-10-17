@@ -11,6 +11,7 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
+  background: transparent;
 }
 body {
   font:
@@ -75,6 +76,9 @@ button img {
   -webkit-mask: var(--icon) center/contain no-repeat;
 }
 .launcher {
+  position: relative;
+  isolation: isolate;
+  contain: paint;
   --primary: #4d5aaa;
   --on-primary: #fff;
   --text: #1d1b20;
@@ -98,6 +102,9 @@ button img {
   background:
     linear-gradient(#ffffff18, #ffffff18),
     url('/hmcl/background.jpg') center/cover no-repeat;
+}
+.launcher.window-square {
+  border-radius: 0;
 }
 .launcher.dark {
   --primary: #b5bdfc;

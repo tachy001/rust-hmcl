@@ -72,6 +72,14 @@ const menuElement = ref<HTMLElement | null>(null);
 let menuTrigger: HTMLElement | null = null;
 const accountError = ref('');
 const settingsSaved = ref(false);
+const windowSquare = ref(false);
+let stopWindowResize: (() => void) | undefined;
+let unmounted = false;
+async function syncWindowShape() {
+  const window = getCurrentWindow();
+  const [maximized, fullscreen] = await Promise.all([window.isMaximized(), window.isFullscreen()]);
+  windowSquare.value = maximized || fullscreen;
+}
 const modalElement = ref<HTMLElement | null>(null);
 let previousFocus: HTMLElement | null = null;
 let timer: ReturnType<typeof setInterval> | undefined,
@@ -422,7 +430,10 @@ function windowAction(action: 'minimize' | 'toggleMaximize' | 'close') {
     dialog.value = { title: '任务仍在运行', message: '请先结束当前任务，再关闭启动器。' };
     return;
   }
-  void getCurrentWindow()[action]().catch(fail);
+  void getCurrentWindow()
+    [action]()
+    .then(() => (action === 'toggleMaximize' ? syncWindowShape() : undefined))
+    .catch(fail);
 }
 async function poll() {
   if (polling || !desktopAvailable()) return;
@@ -449,8 +460,20 @@ onMounted(async () => {
   await refresh();
   await poll();
   timer = setInterval(poll, 500);
+  try {
+    const stop = await getCurrentWindow().onResized(() => {
+      void syncWindowShape().catch(fail);
+    });
+    if (unmounted) stop();
+    else stopWindowResize = stop;
+    await syncWindowShape();
+  } catch (cause) {
+    fail(cause);
+  }
 });
 onUnmounted(() => {
+  unmounted = true;
+  stopWindowResize?.();
   if (timer) clearInterval(timer);
 });
 </script>
@@ -458,7 +481,11 @@ onUnmounted(() => {
 <template>
   <div
     class="launcher"
-    :class="{ dark: data?.config.dark_mode, reduced: data?.config.reduce_motion }"
+    :class="{
+      dark: data?.config.dark_mode,
+      reduced: data?.config.reduce_motion,
+      'window-square': windowSquare,
+    }"
     :style="{ '--ease-emphasized': emphasizedCss }"
     @pointerdown="ripple"
   >

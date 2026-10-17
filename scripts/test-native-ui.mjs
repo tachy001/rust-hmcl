@@ -145,7 +145,44 @@ try {
       Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => {}))),
     );
   await settle();
-  await page.screenshot({ path: join(output, 'native-home-light.png') });
+  await page.screenshot({ path: join(output, 'native-home-light.png'), omitBackground: true });
+  const cornerProof = [];
+  for (const [name, x, y] of [
+    ['top-left', 0, 0],
+    ['top-right', layout.width - 24, 0],
+    ['bottom-left', 0, layout.height - 24],
+    ['bottom-right', layout.width - 24, layout.height - 24],
+  ]) {
+    const png = await page.screenshot({
+      clip: { x, y, width: 24, height: 24 },
+      omitBackground: true,
+    });
+    const samples = await page.evaluate(
+      async ({ bytes, name }) => {
+        const bitmap = await createImageBitmap(
+          new Blob([new Uint8Array(bytes)], { type: 'image/png' }),
+        );
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, 0, 0);
+        const image = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const x = name.endsWith('right') ? canvas.width - 1 : 0;
+        const y = name.startsWith('bottom') ? canvas.height - 1 : 0;
+        const alpha = image[(y * canvas.width + x) * 4 + 3];
+        const antialiased = image.some(
+          (value, index) => index % 4 === 3 && value > 0 && value < 255,
+        );
+        bitmap.close();
+        return { name, alpha, antialiased };
+      },
+      { bytes: [...png], name },
+    );
+    assert.equal(samples.alpha, 0, `${name} must be transparent`);
+    assert.equal(samples.antialiased, true, `${name} must have a smooth edge`);
+    cornerProof.push(samples);
+  }
   await page.getByRole('button', { name: '账户', exact: true }).click();
   await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
   await page.getByRole('textbox', { name: '离线用户名', exact: true }).fill('NativePlayer');
@@ -164,7 +201,7 @@ try {
   await page.getByRole('button', { name: '切换主题', exact: true }).click();
   await expect(page.locator('.launcher')).toHaveClass(/dark/);
   await settle();
-  await page.screenshot({ path: join(output, 'native-settings-dark.png') });
+  await page.screenshot({ path: join(output, 'native-settings-dark.png'), omitBackground: true });
   await page.getByRole('button', { name: '游戏列表', exact: true }).click();
   await page.getByRole('button', { name: '管理 native-fixture', exact: true }).click();
   await page.getByRole('button', { name: '模组管理', exact: true }).click();
@@ -211,6 +248,7 @@ try {
     transport: 'real release Tauri / WebView2 / native IPC',
     layout,
     typography,
+    cornerProof,
     nativeSize,
     url: page.url(),
     nativeWindowVisible: false,
@@ -219,6 +257,7 @@ try {
     handwrittenFixtures: true,
     passed: [
       'hidden native window',
+      'four transparent antialiased corners without opaque page background',
       'bundled Vue assets and CSP',
       'snapshot IPC',
       'invalid configuration does not write',
@@ -232,7 +271,7 @@ try {
     ],
     limitations: [
       'Windows only',
-      'native visible-window geometry and rounded corners not verified',
+      'visible compositor edges, corner hit testing and native maximization not verified',
       'game launching and installers not exercised',
     ],
   };

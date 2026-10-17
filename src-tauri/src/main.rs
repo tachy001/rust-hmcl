@@ -77,6 +77,12 @@ async fn enable_resources(
 }
 fn main() {
     let mut context = tauri::generate_context!();
+    // Tauri's Windows shadow adds a white 1px frame and a second corner mask.
+    // The transparent WebView owns the complete smooth outline instead.
+    #[cfg(target_os = "windows")]
+    for window in &mut context.config_mut().app.windows {
+        window.shadow = false;
+    }
     if std::env::args().any(|argument| argument == "--verify-hidden-ui") {
         // The verification helper uses a private profile and a hidden native window.
         // No test transport or extra IPC commands are added to the application.

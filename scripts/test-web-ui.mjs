@@ -139,9 +139,37 @@ try {
     return rpc(command, args ?? {});
   });
   await context.addInitScript(() => {
+    const callbacks = new Map();
+    const listeners = new Map();
+    let callbackId = 0;
+    window.__hmclWindowState = { maximized: false, fullscreen: false };
+    window.__hmclResize = () => {
+      for (const handler of listeners.values())
+        callbacks.get(handler)?.({
+          event: 'tauri://resize',
+          payload: { width: innerWidth, height: innerHeight },
+        });
+    };
+    window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+      unregisterListener: (_event, id) => listeners.delete(id),
+    };
     window.__TAURI_INTERNALS__ = {
-      invoke: (command, args) =>
-        window.__hmclInvoke(command, JSON.parse(JSON.stringify(args ?? {}))),
+      metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
+      transformCallback: (callback) => {
+        callbacks.set(++callbackId, callback);
+        return callbackId;
+      },
+      unregisterCallback: (id) => callbacks.delete(id),
+      invoke: async (command, args) => {
+        if (command === 'plugin:window|is_maximized') return window.__hmclWindowState.maximized;
+        if (command === 'plugin:window|is_fullscreen') return window.__hmclWindowState.fullscreen;
+        if (command === 'plugin:event|listen') {
+          listeners.set(args.handler, args.handler);
+          return args.handler;
+        }
+        if (command === 'plugin:event|unlisten') return;
+        return window.__hmclInvoke(command, JSON.parse(JSON.stringify(args ?? {})));
+      },
     };
   });
   const page = await context.newPage();
@@ -156,6 +184,23 @@ try {
     );
   await settle();
   await page.screenshot({ path: join(output, 'home-light.png') });
+  await expect(page.locator('.launcher')).toHaveCSS('border-radius', '12px');
+  await page.evaluate(() => {
+    window.__hmclWindowState.maximized = true;
+    window.__hmclResize();
+  });
+  await expect(page.locator('.launcher')).toHaveCSS('border-radius', '0px');
+  await page.evaluate(() => {
+    window.__hmclWindowState.maximized = false;
+    window.__hmclWindowState.fullscreen = true;
+    window.__hmclResize();
+  });
+  await expect(page.locator('.launcher')).toHaveCSS('border-radius', '0px');
+  await page.evaluate(() => {
+    window.__hmclWindowState.fullscreen = false;
+    window.__hmclResize();
+  });
+  await expect(page.locator('.launcher')).toHaveCSS('border-radius', '12px');
   await page.getByRole('button', { name: '选择游戏版本', exact: true }).click();
   await expect(page.getByRole('menu')).toBeVisible();
   await settle();
@@ -441,6 +486,7 @@ try {
         handwrittenFixtures: true,
         passed: [
           'snapshot',
+          'window corners become square when maximized or fullscreen and restore on resize',
           'invalid settings do not change stored configuration',
           'traversal rejection',
           'split launch selector',
