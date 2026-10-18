@@ -73,6 +73,17 @@ export interface Mod {
   enabled: boolean;
   size: number;
 }
+export interface ModEnvironment {
+  game: string;
+  loader: string;
+}
+export interface ModProject {
+  project_id: string;
+  title: string;
+  description: string;
+  slug: string;
+  downloads: number;
+}
 export interface Pack {
   name: string;
   title: string;
@@ -85,6 +96,7 @@ export interface Pack {
 export type Job =
   | { kind: 'launch' | 'install' | 'repair' | 'fabric' | 'quilt'; id: string }
   | { kind: 'java'; major: number }
+  | { kind: 'install_mod'; id: string; project: string }
   | { kind: 'rename'; id: string; name: string }
   | { kind: 'duplicate'; id: string; name: string; copy_saves: boolean };
 export const api = {
@@ -96,6 +108,8 @@ export const api = {
   versions: () => invoke<Version[]>('versions'),
   runtimes: () => invoke<Runtime[]>('runtimes'),
   mods: () => invoke<Mod[]>('mod_files'),
+  modEnvironment: (id: string) => invoke<ModEnvironment>('mod_environment', { id }),
+  searchMods: (id: string, query: string) => invoke<ModProject[]>('search_mods', { id, query }),
   toggleMod: (name: string) => invoke<Mod[]>('toggle_mod', { name }),
   packs: () => invoke<Pack[]>('resource_packs'),
   enablePacks: (names: string[], enabled: boolean, confirmed = false) =>

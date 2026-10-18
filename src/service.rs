@@ -61,6 +61,10 @@ pub enum Job {
     Quilt {
         id: String,
     },
+    InstallMod {
+        id: String,
+        project: String,
+    },
     Duplicate {
         id: String,
         name: String,
@@ -81,6 +85,11 @@ pub struct ResourcePack {
     pub enabled: bool,
     pub compatible: bool,
     pub warning: Option<String>,
+}
+#[derive(Serialize)]
+pub struct ModEnvironment {
+    pub game: String,
+    pub loader: String,
 }
 #[derive(Clone)]
 pub struct Service {
@@ -189,6 +198,35 @@ impl Service {
     pub fn mod_files(&self) -> Result<Vec<mods::ModFile>> {
         mods::list(&mods::directory(&self.config()?)?)
     }
+    fn mod_config(&self, id: &str) -> Result<Config> {
+        let mut config = self.config()?;
+        game::version_dir(Path::new(&config.game_dir), id)?;
+        config.selected = id.into();
+        Ok(config)
+    }
+    pub fn mod_environment(&self, id: &str) -> Result<ModEnvironment> {
+        let (game, loader) = crate::modrinth::environment(&self.mod_config(id)?)?;
+        Ok(ModEnvironment { game, loader })
+    }
+    pub fn search_mods(&self, id: &str, query: &str) -> Result<Vec<crate::modrinth::Project>> {
+        let query = query.trim();
+        if query.is_empty() || query.chars().count() > 200 {
+            bail!("请输入 1–200 个字符的模组名称");
+        }
+        let config = self.mod_config(id)?;
+        // Validate locally before constructing a network worker.
+        crate::modrinth::environment(&config)?;
+        let (tx, rx) = mpsc::channel();
+        let worker = Worker::new(tx, Arc::new(AtomicBool::new(false)))?;
+        worker.search_mods(&config, query)?;
+        drop(worker);
+        rx.into_iter()
+            .find_map(|event| match event {
+                Event::Projects(projects) => Some(projects),
+                _ => None,
+            })
+            .context("模组搜索未返回结果")
+    }
     pub fn toggle_mod(&self, name: &str) -> Result<Vec<mods::ModFile>> {
         let task = self
             .task
@@ -256,6 +294,10 @@ impl Service {
         }
         let config = self.config()?;
         match &job {
+            Job::InstallMod { id, project } => {
+                crate::modrinth::validate_project(project)?;
+                self.mod_environment(id)?;
+            }
             Job::Java { major } => {
                 if !(8..=99).contains(major) {
                     bail!("Java 主版本应在 8–99 之间");
@@ -353,6 +395,10 @@ impl Service {
                     config.selected =
                         worker.install_loader(root, &id, Loader::Quilt, None, None)?;
                 }
+                Job::InstallMod { id, project } => {
+                    config.selected = id;
+                    worker.install_mod(&config, &project)?;
+                }
                 Job::Duplicate {
                     id,
                     name,
@@ -401,6 +447,51 @@ impl Service {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn mod_discovery_is_scoped_to_explicit_instance_and_rejects_before_network() {
+        let root = std::env::temp_dir().join(format!("aster-mod-service-{}", std::process::id()));
+        let version = root.join("versions/fabric-sample");
+        std::fs::create_dir_all(&version).unwrap();
+        std::fs::write(version.join("fabric-sample.json"), r#"{"id":"fabric-sample","inheritsFrom":"1.20.1","libraries":[{"name":"net.fabricmc:fabric-loader:0.16.0"}]}"#).unwrap();
+        let vanilla = root.join("versions/1.20.1");
+        std::fs::create_dir_all(&vanilla).unwrap();
+        std::fs::write(
+            vanilla.join("1.20.1.json"),
+            r#"{"id":"1.20.1","libraries":[]}"#,
+        )
+        .unwrap();
+        let service = Service::new(Config {
+            game_dir: root.to_string_lossy().into_owned(),
+            selected: "1.20.1".into(),
+            ..Default::default()
+        });
+        assert!(service.mod_environment("1.20.1").is_err());
+        assert!(service.search_mods("1.20.1", "sodium").is_err());
+        assert!(service.mod_environment("../escape").is_err());
+        let environment = service.mod_environment("fabric-sample").unwrap();
+        assert_eq!(environment.game, "1.20.1");
+        assert_eq!(environment.loader, "fabric");
+        assert_eq!(service.snapshot().unwrap().config.selected, "1.20.1");
+        assert!(service.search_mods("fabric-sample", " ").is_err());
+        assert!(service
+            .search_mods("fabric-sample", &"a".repeat(201))
+            .is_err());
+        assert!(service
+            .start(Job::InstallMod {
+                id: "fabric-sample".into(),
+                project: "../invalid".into()
+            })
+            .is_err());
+        assert!(service
+            .start(Job::InstallMod {
+                id: "1.20.1".into(),
+                project: "sodium".into()
+            })
+            .is_err());
+        assert!(!service.task().unwrap().running);
+        assert!(!root.join("mods").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn bridge_rejects_traversal_and_concurrent_mutation_without_starting_a_worker() {
         let service = Service::new(Config::default());

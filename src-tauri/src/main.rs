@@ -41,6 +41,23 @@ fn cancel_job(service: State<'_, Service>) {
     service.cancel()
 }
 #[tauri::command]
+async fn mod_environment(
+    id: String,
+    service: State<'_, Service>,
+) -> Result<rust_hmcl::service::ModEnvironment, String> {
+    let service = service.inner().clone();
+    blocking(move || service.mod_environment(&id)).await
+}
+#[tauri::command]
+async fn search_mods(
+    id: String,
+    query: String,
+    service: State<'_, Service>,
+) -> Result<Vec<rust_hmcl::modrinth::Project>, String> {
+    let service = service.inner().clone();
+    blocking(move || service.search_mods(&id, &query)).await
+}
+#[tauri::command]
 async fn versions(service: State<'_, Service>) -> Result<Vec<Version>, String> {
     let service = service.inner().clone();
     blocking(move || service.versions()).await
@@ -114,6 +131,8 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            mod_environment,
+            search_mods,
             snapshot,
             update_config,
             task,

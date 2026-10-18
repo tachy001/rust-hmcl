@@ -7,13 +7,24 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{collections::HashSet, path::Path};
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, serde::Serialize)]
 pub struct Project {
     pub project_id: String,
     pub title: String,
     pub description: String,
     pub slug: String,
     pub downloads: u64,
+}
+pub(crate) fn validate_project(project: &str) -> Result<()> {
+    if project.is_empty()
+        || project.len() > 128
+        || !project
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        bail!("无效 Modrinth 项目 ID");
+    }
+    Ok(())
 }
 pub fn environment(config: &Config) -> Result<(String, String)> {
     let meta = crate::metadata::resolve(Path::new(&config.game_dir), &config.selected)?;
@@ -61,12 +72,7 @@ impl Worker {
         Ok(())
     }
     fn compatible_version(&self, project: &str, game: &str, loader: &str) -> Result<Value> {
-        if !project
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-        {
-            bail!("无效 Modrinth 项目 ID");
-        }
+        validate_project(project)?;
         let mut url = reqwest::Url::parse(&format!(
             "https://api.modrinth.com/v2/project/{project}/version"
         ))?;
@@ -188,6 +194,15 @@ fn validate_compatibility(version: &Value, game: &str, loader: &str) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn project_ids_are_single_nonempty_components() {
+        for invalid in ["", "../mod", "a/b", "a?b", "a b", "模组", "a\\b"] {
+            assert!(validate_project(invalid).is_err(), "{invalid}");
+        }
+        assert!(validate_project(&"a".repeat(129)).is_err());
+        assert!(validate_project("fabric-api").is_ok());
+        assert!(validate_project("P7dR8mSH").is_ok());
+    }
     #[test]
     fn incompatible_dependency_is_rejected() {
         let value = json!({"game_versions":["1.20.1"],"loaders":["fabric"]});

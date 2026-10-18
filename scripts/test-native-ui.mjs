@@ -225,6 +225,53 @@ try {
   assert.ok((await stat(join(game, 'mods', 'native-sample.jar.disabled'))).isFile());
   await page.getByRole('button', { name: '启用', exact: true }).click();
   await expect(page.getByText('native-sample.jar', { exact: true })).toBeVisible();
+  await page.getByRole('searchbox', { name: '筛选已安装模组', exact: true }).fill('missing-mod');
+  await expect(page.getByText('没有匹配的模组', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '清空筛选', exact: true }).click();
+  await page.getByRole('button', { name: '发现模组', exact: true }).click();
+  await expect(page.getByText('此实例暂不能在线安装模组', { exact: true })).toBeVisible();
+  await expect(page.locator('.mod-notice')).toContainText('请先选择 Fabric 或 Quilt');
+  const fabricEnvironment = join(fixture, 'minecraft', 'versions', 'native-fabric');
+  await mkdir(fabricEnvironment, { recursive: true });
+  await writeFile(
+    join(fabricEnvironment, 'native-fabric.json'),
+    JSON.stringify({
+      id: 'native-fabric',
+      inheritsFrom: 'native-fixture',
+      libraries: [{ name: 'net.fabricmc:fabric-loader:0.16.0' }],
+    }),
+  );
+  assert.deepEqual(await invoke('mod_environment', { id: 'native-fabric' }), {
+    game: 'native-fixture',
+    loader: 'fabric',
+  });
+  assert.equal((await invoke('snapshot')).config.selected, 'native-fixture');
+  const invalidSearch = await page.evaluate(async () => {
+    try {
+      await window.__TAURI_INTERNALS__.invoke('search_mods', {
+        id: 'native-fixture',
+        query: 'sodium',
+      });
+      return '';
+    } catch (error) {
+      return String(error);
+    }
+  });
+  assert.match(invalidSearch, /请先选择 Fabric 或 Quilt/);
+  await settle();
+  await page.screenshot({ path: join(output, 'native-mod-discovery.png'), omitBackground: true });
+  const invalidMod = await page.evaluate(async () => {
+    try {
+      await window.__TAURI_INTERNALS__.invoke('start_job', {
+        job: { kind: 'install_mod', id: 'native-fixture', project: '../invalid' },
+      });
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  assert.equal(invalidMod, true);
+  assert.equal((await invoke('task')).running, false);
   await page.getByRole('button', { name: '资源包管理', exact: true }).click();
   const checkbox = page.getByRole('checkbox', { name: '启用 Native Pack', exact: true });
   await checkbox.click();
@@ -282,6 +329,7 @@ try {
       'global settings persistence',
       'theme',
       'mod toggle round trip',
+      'local mod filtering, native loader guard and invalid project rejection',
       'resource compatibility confirmation before options write',
       'native background copy task and completion refresh',
     ],

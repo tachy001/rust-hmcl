@@ -6,6 +6,7 @@ import Avatar from './Avatar.vue';
 import BrandMark from './BrandMark.vue';
 import HomeDashboard from './HomeDashboard.vue';
 import FavoriteToggle from './FavoriteToggle.vue';
+import ModLibrary from './ModLibrary.vue';
 import InstanceSettings from './InstanceSettings.vue';
 import {
   api,
@@ -934,23 +935,18 @@ onUnmounted(() => {
                 </div>
                 <p class="subtitle">Forge／NeoForge 安装尚未实现。</p>
               </div>
-              <template v-if="tab === 'mods'"
-                ><div class="toolbar">
-                  <h1>模组管理</h1>
-                  <button :disabled="loading" @click="loadPage"><Icon name="refresh" />刷新</button>
-                </div>
-                <div class="list">
-                  <div v-for="mod in mods" :key="mod.name" class="list-row">
-                    <Icon name="extension" /><span
-                      ><b>{{ mod.name }}</b
-                      ><small>{{ (mod.size / 1024).toFixed(0) }} KB</small></span
-                    ><button :disabled="task.running" @click="toggleMod(mod.name)">
-                      {{ mod.enabled ? '禁用' : '启用' }}
-                    </button>
-                  </div>
-                </div>
-                <p v-if="!mods.length && !loading" class="empty">没有模组</p></template
-              >
+              <ModLibrary
+                v-if="tab === 'mods' && data"
+                :key="data.config.selected"
+                :id="data.config.selected"
+                :mods="mods"
+                :busy="task.running"
+                :loading="loading"
+                @refresh="loadPage"
+                @toggle="toggleMod"
+                @start="start"
+                @components="tab = 'components'"
+              />
               <template v-if="tab === 'resources'"
                 ><div class="toolbar">
                   <h1>资源包管理</h1>

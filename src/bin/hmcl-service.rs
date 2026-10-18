@@ -15,6 +15,13 @@ enum Request {
     Versions,
     Runtimes,
     ModFiles,
+    ModEnvironment {
+        id: String,
+    },
+    SearchMods {
+        id: String,
+        query: String,
+    },
     ResourcePacks,
     CancelJob,
     UpdateConfig {
@@ -39,6 +46,10 @@ fn execute(service: &Service, request: Request) -> anyhow::Result<Value> {
         Request::Versions => serde_json::to_value(service.versions()?)?,
         Request::Runtimes => serde_json::to_value(service.runtimes()?)?,
         Request::ModFiles => serde_json::to_value(service.mod_files()?)?,
+        Request::ModEnvironment { id } => serde_json::to_value(service.mod_environment(&id)?)?,
+        Request::SearchMods { id, query } => {
+            serde_json::to_value(service.search_mods(&id, &query)?)?
+        }
         Request::ResourcePacks => serde_json::to_value(service.resource_packs()?)?,
         Request::CancelJob => {
             service.cancel();

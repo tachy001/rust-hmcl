@@ -1,5 +1,6 @@
 // Real built frontend -> JSON-lines harness -> shared Rust Service.
 // Uses a headless browser and independent handwritten fixtures, never the desktop.
+// --online-modrinth additionally downloads a mod into that isolated fixture; it never executes it.
 import { chromium, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -9,6 +10,9 @@ import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { resolve, join, sep, extname } from 'node:path';
 import { emphasized } from '../frontend/src/motion.ts';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+const onlineModrinth = process.argv.includes('--online-modrinth');
+let modrinthProof = null;
 
 const root = resolve(import.meta.dirname, '..');
 const output = join(root, 'dist', 'web-ui-proof');
@@ -135,7 +139,13 @@ try {
     reducedMotion: 'no-preference',
   });
   await context.exposeBinding('__hmclInvoke', async (_source, command, args) => {
-    if (command === 'start_job' && !['duplicate', 'rename'].includes(args?.job?.kind))
+    const allowedModInstall =
+      onlineModrinth && args?.job?.kind === 'install_mod' && args?.job?.id === 'online-fabric';
+    if (
+      command === 'start_job' &&
+      !['duplicate', 'rename'].includes(args?.job?.kind) &&
+      !allowedModInstall
+    )
       throw Error('Headless UI verification never starts Java, games, downloads or installers.');
     return rpc(command, args ?? {});
   });
@@ -364,6 +374,17 @@ try {
   assert.ok((await stat(join(game, 'mods', 'sample.jar.disabled'))).isFile());
   await page.getByRole('button', { name: '启用', exact: true }).click();
   await expect(page.getByText('sample.jar', { exact: true })).toBeVisible();
+  const modFilter = page.getByRole('searchbox', { name: '筛选已安装模组', exact: true });
+  await modFilter.fill('does-not-exist');
+  await expect(page.getByText('没有匹配的模组', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '清空筛选', exact: true }).click();
+  await expect(page.getByText('sample.jar', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '发现模组', exact: true }).click();
+  await expect(page.getByText('此实例暂不能在线安装模组', { exact: true })).toBeVisible();
+  assert.equal(await page.getByRole('button', { name: '搜索模组', exact: true }).count(), 0);
+  await settle();
+  await page.screenshot({ path: join(output, 'mod-discover-vanilla.png') });
+  await page.getByRole('button', { name: '已安装模组', exact: false }).click();
   await page.getByRole('button', { name: '资源包管理', exact: true }).click();
   const checkbox = page.getByRole('checkbox', { name: '启用 Demo Pack', exact: true });
   await checkbox.click();
@@ -521,6 +542,85 @@ try {
   await page.setViewportSize({ width: 1080, height: 700 });
   await settle();
   await page.screenshot({ path: join(output, 'instances-dark.png') });
+  if (onlineModrinth) {
+    const fabric = join(fixture, 'minecraft', 'versions', 'online-fabric');
+    await mkdir(fabric, { recursive: true });
+    await writeFile(
+      join(fabric, 'online-fabric.json'),
+      JSON.stringify({
+        id: 'online-fabric',
+        inheritsFrom: '1.20.1',
+        libraries: [{ name: 'net.fabricmc:fabric-loader:0.16.0' }],
+      }),
+    );
+    const config = (await rpc('snapshot')).config;
+    await rpc('update_config', {
+      config: {
+        ...config,
+        version_settings: { ...config.version_settings, 'online-fabric': { isolated: true } },
+      },
+    });
+    await page.getByRole('button', { name: '刷新', exact: true }).click();
+    await page.getByRole('button', { name: '管理 online-fabric', exact: true }).click();
+    await page.getByRole('button', { name: '模组管理', exact: true }).click();
+    await page.getByRole('button', { name: '发现模组', exact: true }).first().click();
+    await expect(page.getByText('1.20.1 · fabric', { exact: true })).toBeVisible();
+    await page
+      .getByRole('searchbox', { name: '搜索 Modrinth 模组', exact: true })
+      .fill('fabric-api');
+    await page.getByRole('button', { name: '搜索模组', exact: true }).click();
+    const install = page.getByRole('button', { name: '安装 Fabric API', exact: true });
+    await expect(install).toBeVisible({ timeout: 60000 });
+    await settle();
+    await page.screenshot({ path: join(output, 'modrinth-results-dark.png') });
+    await page.setViewportSize({ width: 800, height: 560 });
+    await settle();
+    assert.equal(
+      await page
+        .locator('.page')
+        .last()
+        .evaluate((element) => element.scrollWidth > element.clientWidth),
+      false,
+    );
+    await page.screenshot({ path: join(output, 'modrinth-results-narrow.png') });
+    const beforeInstall = (await rpc('task')).id;
+    await install.click();
+    await expect
+      .poll(async () => (await rpc('task')).id, { timeout: 10000 })
+      .toBeGreaterThan(beforeInstall);
+    await expect.poll(async () => (await rpc('task')).running, { timeout: 120000 }).toBe(false);
+    const finished = await rpc('task');
+    assert.equal(finished.error, null);
+    const installed = await rpc('mod_files');
+    assert.ok(
+      installed.some((mod) => mod.name.startsWith('fabric-api') && mod.enabled && mod.size > 10000),
+    );
+    const registry = JSON.parse(
+      await readFile(join(fabric, 'game', 'mods', '.rust-modrinth.json'), 'utf8'),
+    );
+    modrinthProof = {
+      transport: 'real official Modrinth API and CDN',
+      instance: 'online-fabric',
+      game: '1.20.1',
+      loader: 'fabric',
+      files: [],
+    };
+    for (const entry of Object.values(registry)) {
+      const bytes = await readFile(join(fabric, 'game', 'mods', entry.filename));
+      modrinthProof.files.push({
+        filename: entry.filename,
+        version: entry.version,
+        bytes: bytes.length,
+        sha1: createHash('sha1').update(bytes).digest('hex'),
+      });
+    }
+    await page.getByRole('button', { name: '已安装模组', exact: false }).click();
+    await page.getByRole('button', { name: '刷新', exact: true }).click();
+    await expect(page.getByText(installed[0].name, { exact: true })).toBeVisible();
+    await page.setViewportSize({ width: 1080, height: 700 });
+    await settle();
+    await page.screenshot({ path: join(output, 'modrinth-installed.png') });
+  }
   assert.deepEqual(failures, []);
   await writeFile(
     join(output, 'proof.json'),
@@ -531,6 +631,7 @@ try {
         desktopControl: false,
         javaOrGameStarted: false,
         handwrittenFixtures: true,
+        modrinthProof,
         passed: [
           'snapshot',
           'Aster home favorites persist and library filter updates after unpinning',
@@ -548,6 +649,7 @@ try {
           'theme changes preserve unsaved instance settings',
           'restoring inheritance only persists after explicit save',
           'mod rename round trip',
+          'local mod search and vanilla discovery guard without network',
           'compatibility cancel and confirmation',
           'modal focus and Escape',
           '800px layout',
