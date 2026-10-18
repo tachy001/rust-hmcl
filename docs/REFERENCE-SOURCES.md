@@ -1,6 +1,6 @@
 # 参考源码索引
 
-当前目标仍是 Rust 重构并完整还原 HMCL：Windows、Linux、macOS 可用，启动器本身无需 Java，游戏使用独立 Java 环境。新增 PCL 作为补充参考，不自动改变 HMCL 的界面与功能验收目标。
+用户已将目标调整为原创启动器，当前产品为“星屿 Aster”。面向 Windows、Linux、macOS，启动器本身无需 Java，游戏使用独立 Java 环境。HMCL 与新增 PCL 作为研究参考，设计方向见 `ASTER-DESIGN.md`。
 
 ## 本机来源
 
@@ -23,10 +23,10 @@
 | 启动与 Java | `Modules/Minecraft/ModLaunch.vb`、`ModJava.vb` | Java 发现、选择、启动流程与错误处理 |
 | 下载与实例 | `Modules/Minecraft/ModDownload.vb`、`Pages/PageDownload/PageDownloadInstall.xaml.vb`、`Pages/PageInstance/PageInstanceOverall.xaml.vb` | 安装流程、进度、失败反馈和实例入口 |
 
-对照时分别核验交互目的和边界情况；原版 HMCL 的尺寸、曲线与行为仍以 HMCL 自身源码为依据。不能直接把 PCL 的按压或回弹参数当作 HMCL 的原版参数。
+对照时核验交互目的和边界情况，独立实现适合 Aster 的控件和布局。不能把 PCL 的参数描述成 HMCL 原版参数，也不将 Aster 的原创布局描述成参考启动器的官方界面。
 
 ## 内容使用记录
 
 PCL 的 `LICENCE` 标注《PCL 分发有限许可》，并链接完整许可，另附《PCL 存储库合理使用指南》。它不是本项目 HMCL 参考源码的同一套许可。
 
-若后续实际引用 PCL 内容，需先核对适用条款并记录具体文件、引用范围、作者及署名位置；不能把本次只读审阅当作已取得无限制复用许可。当前项目没有因增加参考目录而变更名称或许可，也没有将该目录纳入 Git 仓库和发布包。
+若后续实际引用 PCL 内容，需先核对适用条款并记录具体文件、范围、作者和署名位置，不能把只读审阅当作无限制复用许可。PCL 目录不纳入 Git 和发布包。Aster 的命名来自用户要求原创产品，与引入 PCL 参考无关。

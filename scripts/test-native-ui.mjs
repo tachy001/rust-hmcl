@@ -41,6 +41,7 @@ await writeFile(
     game_dir: join(fixture, 'minecraft'),
     selected: 'native-fixture',
     isolated: true,
+    dark_mode: false,
     player: 'NativeProof',
   }),
 );
@@ -142,10 +143,20 @@ try {
   await expect(page.getByRole('alert')).toHaveCount(0);
   const settle = () =>
     page.evaluate(() =>
-      Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => {}))),
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+          .map((animation) => animation.finished.catch(() => {})),
+      ),
     );
   await settle();
   await page.screenshot({ path: join(output, 'native-home-light.png'), omitBackground: true });
+  await page.getByRole('button', { name: '收藏 native-fixture', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: '取消收藏 native-fixture', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  assert.ok((await invoke('snapshot')).config.favorites.includes('native-fixture'));
   const cornerProof = [];
   for (const [name, x, y] of [
     ['top-left', 0, 0],
@@ -202,7 +213,11 @@ try {
   await expect(page.locator('.launcher')).toHaveClass(/dark/);
   await settle();
   await page.screenshot({ path: join(output, 'native-settings-dark.png'), omitBackground: true });
-  await page.getByRole('button', { name: '游戏列表', exact: true }).click();
+  await page.getByRole('button', { name: '首页', exact: true }).click();
+  await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
+  await settle();
+  await page.screenshot({ path: join(output, 'native-home-dark.png'), omitBackground: true });
+  await page.getByRole('button', { name: '游戏库', exact: true }).click();
   await page.getByRole('button', { name: '管理 native-fixture', exact: true }).click();
   await page.getByRole('button', { name: '模组管理', exact: true }).click();
   await page.getByRole('button', { name: '禁用', exact: true }).click();
@@ -257,6 +272,7 @@ try {
     handwrittenFixtures: true,
     passed: [
       'hidden native window',
+      'Aster home favorite persists through real native IPC',
       'four transparent antialiased corners without opaque page background',
       'bundled Vue assets and CSP',
       'snapshot IPC',

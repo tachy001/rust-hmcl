@@ -61,7 +61,7 @@ impl Default for Config {
             directories: vec![],
             download_threads: 8,
             auto_java: true,
-            dark_mode: false,
+            dark_mode: true,
             extra_jvm: String::new(),
             wallpaper: String::new(),
             ui_scale: 1.,

@@ -39,6 +39,7 @@ await writeFile(
     selected: '1.20.1',
     player: 'PreviewUser',
     isolated: true,
+    dark_mode: false,
     version_settings: { untouched: { memory: 8192, width: 1280 } },
   }),
 );
@@ -180,10 +181,29 @@ try {
   await expect(page.locator('.launch-primary')).toContainText('1.20.1');
   const settle = () =>
     page.evaluate(() =>
-      Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => {}))),
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+          .map((animation) => animation.finished.catch(() => {})),
+      ),
     );
   await settle();
   await page.screenshot({ path: join(output, 'home-light.png') });
+  assert.equal(
+    await page
+      .locator('.floating-island')
+      .evaluate((element) => getComputedStyle(element).animationName),
+    'island-drift',
+  );
+  await page.getByRole('button', { name: '收藏 1.20.1', exact: true }).click();
+  await expect(page.getByRole('button', { name: '取消收藏 1.20.1', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  assert.ok(
+    JSON.parse(await readFile(join(fixture, 'config.json'), 'utf8')).favorites.includes('1.20.1'),
+  );
   await expect(page.locator('.launcher')).toHaveCSS('border-radius', '12px');
   await page.evaluate(() => {
     window.__hmclWindowState.maximized = true;
@@ -203,6 +223,12 @@ try {
   await expect(page.locator('.launcher')).toHaveCSS('border-radius', '12px');
   await page.getByRole('button', { name: '选择游戏版本', exact: true }).click();
   await expect(page.getByRole('menu')).toBeVisible();
+  await expect(page.locator('.version-popup button[aria-current="true"]')).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(page.getByRole('menuitem', { name: '安装新版本', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '选择游戏版本', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: '选择游戏版本', exact: true }).click();
   await settle();
   await page.screenshot({ path: join(output, 'version-selector.png') });
   await page.getByRole('button', { name: '选择游戏版本', exact: true }).click();
@@ -270,7 +296,28 @@ try {
   await page.locator('.page').evaluate((element) => (element.scrollTop = 0));
   await settle();
   await page.screenshot({ path: join(output, 'settings-dark.png') });
-  await page.getByRole('button', { name: '游戏列表', exact: true }).click();
+  await page.getByRole('button', { name: '首页', exact: true }).click();
+  await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
+  await settle();
+  await page.screenshot({ path: join(output, 'home-dark.png') });
+  await page.setViewportSize({ width: 800, height: 560 });
+  await settle();
+  assert.equal(
+    await page
+      .locator('.page')
+      .last()
+      .evaluate((element) => element.scrollWidth > element.clientWidth),
+    false,
+    'Aster home must fit the narrow viewport without horizontal scrolling',
+  );
+  await page.screenshot({ path: join(output, 'home-dark-narrow.png') });
+  await page.setViewportSize({ width: 1080, height: 700 });
+  await page.getByRole('button', { name: '游戏库', exact: true }).click();
+  await page.getByRole('button', { name: '只看收藏', exact: true }).click();
+  await expect(page.locator('.library-list .list-row')).toHaveCount(1);
+  await page.getByRole('button', { name: '取消收藏 1.20.1', exact: true }).click();
+  await expect(page.getByText('这里暂时没有匹配的游戏', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '显示全部游戏', exact: true }).click();
   await page.getByRole('button', { name: '管理 1.20.1', exact: true }).click();
   await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
   await page.getByRole('checkbox', { name: '单独设置最大内存（MB）', exact: true }).check();
@@ -352,7 +399,7 @@ try {
     ),
     '0s',
   );
-  await page.getByRole('button', { name: '游戏列表', exact: true }).click();
+  await page.getByRole('button', { name: '游戏库', exact: true }).click();
   await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
   assert.equal(
     await page
@@ -486,6 +533,9 @@ try {
         handwrittenFixtures: true,
         passed: [
           'snapshot',
+          'Aster home favorites persist and library filter updates after unpinning',
+          'original island scene uses transform animation',
+          'Aster version picker keyboard navigation and focus restoration',
           'window corners become square when maximized or fullscreen and restore on resize',
           'invalid settings do not change stored configuration',
           'traversal rejection',

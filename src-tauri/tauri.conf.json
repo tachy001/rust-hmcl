@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Rust HMCL",
+  "productName": "Aster Launcher",
   "version": "0.3.11",
   "identifier": "org.rusthmcl.launcher",
   "build": {
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Rust HMCL",
+        "title": "星屿 Aster",
         "width": 1080,
         "height": 700,
         "minWidth": 800,

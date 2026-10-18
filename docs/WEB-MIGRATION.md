@@ -1,15 +1,15 @@
 # Rust 核心与 Web 界面迁移
 
-目标仍是完整还原参考 HMCL 的功能、界面和交互。当前切换到 Rust +
-Tauri 2 + Vue 3 / TypeScript / CSS，迁移完成前保留 egui 入口作为回归参照。
-不能把 Web 原型的外观或一次构建成功视为完整还原。
+用户已将目标调整为原创启动器“星屿 Aster”，见 `ASTER-DESIGN.md`。
+当前使用 Rust + Tauri 2 + Vue 3 / TypeScript / CSS，迁移完成前保留
+egui 入口作为功能回归参照。不能把界面更新或一次构建成功视为全部功能验收。
 
 ## 结构
 
 - `src/lib.rs`：共用 Rust 核心；`--no-default-features` 不依赖 egui。
 - `src/service.rs`：配置、实例目录、Java、任务状态、取消、模组和资源包的命令边界。
 - `src-tauri/`：Tauri 桌面入口，调用同一个 Service；阻塞操作放入工作线程。
-- `frontend/src/`：真实 Web 界面，使用原 HMCL SVG / PNG / 壁纸。
+- `frontend/src/`：Aster 原创布局、主题、品牌与浮岛场景，保留有来源记录的 HMCL 游戏图标和皮肤等素材。
 - `src/main.rs`：迁移期间保留的旧版 egui 入口。
 - `src/bin/hmcl-service.rs`：仅用于无窗口集成测试的 JSON-lines 入口，
   桌面版不启动它、不开放本地 HTTP 后端端口。
@@ -60,7 +60,8 @@ WebView2，调用正常 Tauri 命令，不替换 IPC、不增加测试命令，�
 
 Windows 构建后可运行 `./scripts/package-windows.ps1`；使用父目录缓存时
 传入 `-TargetDir ../target`。脚本将程序及存在时必需的 GNU WebView2Loader.dll
-一起放入 `dist/web-windows-x64/`，并生成 ZIP、源代码修订号和文件校验记录。
+一起放入 `dist/aster-windows-x64/`，程序命名为 `AsterLauncher.exe`，
+生成带修订号的 ZIP、源代码修订号和文件校验记录。
 不能单独搬走 GNU 构建的 EXE 而遗漏加载器 DLL。
 
 ## 当前迁移覆盖
@@ -95,20 +96,20 @@ Home / End / Esc 和焦点返回。复制按原版默认不包含存档，可单
 尚未完成迁移的已有功能包括：截图、资源包图标与批量选择／
 拖放／导入、模组在线搜索及导入、整合包导入、Java
 登记隐藏等。原项目还未补齐的 Microsoft／第三方认证、Forge／NeoForge、
-世界／原理图管理和完整导出等也仍属于目标范围。不能因此缩小验收范围。
+世界／原理图管理和完整导出等也仍待补齐。原先 HMCL 还原范围保存在历史文档中。
 
 Web 集成测试通过真实 Service 写入独立手工样本，检查账户和设置持久化、
 模组文件改名、资源包确认与 options.txt 写入。它代替 Tauri IPC 使用 stdio
 传输，所以不能作为原生 WebView / IPC / 安装器 / 三端运行的验收证据。
 
-Windows GNU 的 Tauri 发布构建与严格静态检查通过；Rust 测试合计
-60 项通过、4 项联网测试跳过。Web 类型检查、生产资源构建及 23 项无窗口
-集成检查通过。
+当前 Aster 的 Windows GNU Tauri 发布构建、Web 类型检查和生产资源构建通过；
+UI 无依赖的 Rust 核心测试 44 项通过、4 项联网测试跳过。26 项 Web
+集成检查通过，新增收藏持久化与筛选、场景动画、版本选择键盘交互。
 
-新增 12 项真实 Tauri / WebView2 检查通过：隐藏窗口、实际资源和 CSP、IPC、
+13 项真实 Tauri / WebView2 检查通过：首页收藏、隐藏窗口、实际资源和 CSP、IPC、
 错误输入不落盘、账户与全局设置保存、主题、模组启禁用、资源包确认以及原生后台
 复制任务及完成刷新。截图已查看；测试使用手工样本，未启动 Java 或游戏。
-本机 150% DPI 下原生客户区 1620×1007，与页面 1080×672 CSS 像素匹配。
+本轮 150% DPI 下原生客户区 1598×994，页面 1066×663 CSS 像素。
 验证还记录真实字体渲染结果，本机中文侧栏使用 Microsoft YaHei、字号 13px。
 隐藏窗口的渲染不能证明可见窗口的边框、圆角和最大化行为。
 

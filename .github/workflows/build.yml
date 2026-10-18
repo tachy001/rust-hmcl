@@ -33,13 +33,15 @@ jobs:
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
-          name: rust-hmcl-web-${{ matrix.os }}
+          name: aster-launcher-${{ matrix.os }}
           path: |
             target/release/rust-hmcl-desktop
             target/release/rust-hmcl-desktop.exe
             target/release/WebView2Loader.dll
             LICENSE
             assets/hmcl/ATTRIBUTION.md
+            assets/aster/ATTRIBUTION.md
+            docs/ASTER-README.md
             docs/WEB-MIGRATION.md
   build:
     strategy:

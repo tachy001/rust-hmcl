@@ -3,6 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, toRaw, watch } from 'v
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import Icon from './Icon.vue';
 import Avatar from './Avatar.vue';
+import BrandMark from './BrandMark.vue';
+import HomeDashboard from './HomeDashboard.vue';
+import FavoriteToggle from './FavoriteToggle.vue';
 import InstanceSettings from './InstanceSettings.vue';
 import {
   api,
@@ -50,6 +53,7 @@ const releases = ref<Version[]>([]),
   mods = ref<Mod[]>([]),
   packs = ref<Pack[]>([]);
 const query = ref(''),
+  favoritesOnly = ref(false),
   snapshots = ref(false),
   username = ref(''),
   javaMajor = ref(21);
@@ -87,7 +91,7 @@ let timer: ReturnType<typeof setInterval> | undefined,
 const navigation: [Page, string, string][] = [
   ['home', 'home', '首页'],
   ['accounts', 'person', '账户'],
-  ['versions', 'folder', '游戏列表'],
+  ['versions', 'folder', '游戏库'],
   ['download', 'download', '下载'],
   ['java', 'deployed_code', 'Java 管理'],
   ['settings', 'settings', '设置'],
@@ -104,8 +108,10 @@ const current = computed(() =>
 );
 const versions = computed(
   () =>
-    data.value?.instances.filter((item) =>
-      `${item.id} ${item.subtitle}`.toLowerCase().includes(query.value.toLowerCase()),
+    data.value?.instances.filter(
+      (item) =>
+        (!favoritesOnly.value || item.favorite) &&
+        `${item.id} ${item.subtitle}`.toLowerCase().includes(query.value.toLowerCase()),
     ) ?? [],
 );
 const remoteVersions = computed(() =>
@@ -152,6 +158,16 @@ async function select(id: string) {
   const saved = await save({ ...data.value.config, selected: id });
   if (saved) menu.value = false;
   return saved;
+}
+async function toggleFavorite(id: string) {
+  if (!data.value || task.value.running) return;
+  const config = data.value.config;
+  await save({
+    ...config,
+    favorites: config.favorites.includes(id)
+      ? config.favorites.filter((item) => item !== id)
+      : [...config.favorites, id],
+  });
 }
 async function start(job: Job) {
   try {
@@ -482,7 +498,7 @@ onUnmounted(() => {
   <div
     class="launcher"
     :class="{
-      dark: data?.config.dark_mode,
+      dark: data?.config.dark_mode ?? true,
       reduced: data?.config.reduce_motion,
       'window-square': windowSquare,
     }"
@@ -503,10 +519,8 @@ onUnmounted(() => {
         >
           <Icon name="arrow_back" />
         </button>
-        <img v-else class="title-logo" src="/hmcl/title.png" alt="HMCL" />
-        <span data-tauri-drag-region>{{
-          page === 'home' ? 'Hello Minecraft! Launcher · Rust' : title
-        }}</span>
+        <BrandMark v-else class="title-logo" />
+        <span data-tauri-drag-region>{{ page === 'home' ? '星屿 Aster / 工作台' : title }}</span>
         <div class="window-actions">
           <button
             class="window-button"
@@ -529,6 +543,10 @@ onUnmounted(() => {
         </div>
       </header>
       <aside class="sidebar">
+        <div class="sidebar-brand">
+          <BrandMark /><span>星屿<small>ASTER LAUNCHER</small></span>
+        </div>
+        <div class="sidebar-section">{{ page === 'instance' ? '当前游戏' : '工作空间' }}</div>
         <template v-if="page === 'instance'">
           <button
             v-for="item in tabs"
@@ -556,7 +574,7 @@ onUnmounted(() => {
           ><button @click="go('versions')"><Icon name="folder" /><span>返回游戏列表</span></button>
         </template>
         <template v-else>
-          <button class="account-nav" @click="go('accounts')">
+          <button class="account-nav" aria-label="账户" @click="go('accounts')">
             <Avatar v-if="data" :skin="data.avatars[data.config.player] ?? 'wide/steve'" /><Icon
               v-else
               name="person"
@@ -567,7 +585,9 @@ onUnmounted(() => {
           </button>
           <div class="nav-divider"></div>
           <button
-            v-for="item in navigation"
+            v-for="item in navigation.filter(
+              (item) => item[0] !== 'accounts' && item[0] !== 'about',
+            )"
             :key="item[0]"
             :class="{ selected: page === item[0] }"
             @click="go(item[0])"
@@ -575,7 +595,10 @@ onUnmounted(() => {
             <Icon :name="item[1]" /><span>{{ item[2] }}</span>
           </button>
           <div class="nav-spacer"></div>
-          <div class="sidebar-footer">Rust HMCL <small>0.3.11</small></div>
+          <div class="sidebar-footer">
+            <span class="status-dot"></span>ASTER <small>开发预览版</small
+            ><button aria-label="关于" @click="go('about')"><Icon name="info" /></button>
+          </div>
         </template>
       </aside>
       <main class="content" :class="{ home: page === 'home' }">
@@ -592,45 +615,17 @@ onUnmounted(() => {
         >
           <section :key="`${page}/${tab}`" class="page" :inert="transitioning || !!dialog">
             <template v-if="page === 'home'">
-              <Transition name="popup" @before-leave="leavePage"
-                ><div v-if="menu" class="version-popup" role="menu">
-                  <h3>选择游戏版本</h3>
-                  <button
-                    v-for="instance in data?.instances"
-                    :key="instance.id"
-                    @click="select(instance.id)"
-                  >
-                    <img :src="`/hmcl/${instance.icon}.png`" alt="" /><span
-                      >{{ instance.id }}<small>{{ instance.subtitle }}</small></span
-                    ><Icon v-if="instance.id === data?.config.selected" name="check" />
-                  </button>
-                  <p v-if="!data?.instances.length">尚未安装游戏</p>
-                  <button @click="go('download')"><Icon name="add" />安装新版本</button>
-                </div></Transition
-              >
-              <div class="launch-area">
-                <div class="launch-selection">
-                  {{ current?.subtitle ?? '选择或下载 Minecraft 版本' }}
-                </div>
-                <div class="launch-split">
-                  <button
-                    class="launch-primary"
-                    :disabled="task.running || !data"
-                    @click="launch()"
-                  >
-                    <b>启动游戏</b
-                    ><span>{{ data?.config.selected || '未选择游戏版本' }}</span></button
-                  ><button
-                    class="launch-menu"
-                    aria-label="选择游戏版本"
-                    :aria-expanded="menu"
-                    :disabled="task.running"
-                    @click="menu = !menu"
-                  >
-                    <Icon name="arrow_drop_down" :class="{ rotated: menu }" />
-                  </button>
-                </div>
-              </div>
+              <HomeDashboard
+                :data="data"
+                :task="task"
+                :menu="menu"
+                @navigate="go"
+                @launch="launch"
+                @select="select"
+                @inspect="inspect"
+                @favorite="toggleFavorite"
+                @toggle-menu="menu = !menu"
+              />
             </template>
             <template v-else-if="page === 'accounts'">
               <h1>账户</h1>
@@ -662,23 +657,34 @@ onUnmounted(() => {
                   /><button class="primary" :disabled="task.running || !data">添加账户</button>
                 </div>
                 <p v-if="accountError" class="field-error">{{ accountError }}</p>
-                <p class="subtitle">Microsoft 登录与第三方认证尚未迁移。</p>
+                <p class="subtitle">目前支持离线账户；Microsoft 登录与第三方认证暂未提供。</p>
               </form>
             </template>
             <template v-else-if="page === 'versions'">
               <div class="toolbar">
-                <h1>游戏列表</h1>
+                <h1>
+                  游戏库 <span class="heading-count">{{ data?.instances.length ?? 0 }}</span>
+                </h1>
                 <button :disabled="loading || task.running" @click="refresh">
                   <Icon name="refresh" />刷新</button
                 ><button @click="go('download')"><Icon name="add" />安装游戏</button>
               </div>
-              <input
-                v-model="query"
-                class="search"
-                aria-label="搜索游戏版本"
-                placeholder="搜索游戏版本"
-              />
-              <div class="list">
+              <div class="library-controls">
+                <input
+                  v-model="query"
+                  class="search"
+                  aria-label="搜索游戏版本"
+                  placeholder="搜索游戏版本"
+                /><button
+                  class="filter-chip"
+                  :class="{ active: favoritesOnly }"
+                  :aria-pressed="favoritesOnly"
+                  @click="favoritesOnly = !favoritesOnly"
+                >
+                  只看收藏
+                </button>
+              </div>
+              <div class="list library-list">
                 <div
                   v-for="instance in versions"
                   :key="instance.id"
@@ -700,7 +706,12 @@ onUnmounted(() => {
                   >
                     <b>{{ instance.id }}</b
                     ><small>{{ instance.subtitle }}</small></button
-                  ><button
+                  ><FavoriteToggle
+                    :id="instance.id"
+                    :favorite="instance.favorite"
+                    :disabled="task.running"
+                    @toggle="toggleFavorite(instance.id)"
+                  /><button
                     class="icon-button"
                     :aria-label="`启动 ${instance.id}`"
                     :disabled="task.running"
@@ -728,8 +739,27 @@ onUnmounted(() => {
               </div>
               <div v-if="!versions.length" class="empty">
                 <Icon name="folder" />
-                <h2>没有游戏版本</h2>
-                <p>下载 Minecraft，或在设置中选择已有游戏目录。</p>
+                <h2>
+                  {{ query || favoritesOnly ? '这里暂时没有匹配的游戏' : '给你的冒险，留一个位置' }}
+                </h2>
+                <p>
+                  {{
+                    query || favoritesOnly
+                      ? '换个关键词，或显示全部游戏。'
+                      : '安装 Minecraft，或在设置中选择已有游戏目录。'
+                  }}
+                </p>
+                <button
+                  v-if="query || favoritesOnly"
+                  @click="
+                    query = '';
+                    favoritesOnly = false;
+                  "
+                >
+                  显示全部游戏</button
+                ><button v-else class="primary" @click="go('download')">
+                  <Icon name="add" />安装第一个游戏
+                </button>
               </div>
             </template>
             <template v-else-if="page === 'download'">
@@ -956,11 +986,25 @@ onUnmounted(() => {
             </template>
             <template v-else-if="page === 'about'"
               ><div class="about">
-                <img src="/hmcl/logo.png" alt="HMCL" />
-                <h1>Rust HMCL</h1>
-                <p>Rust + Tauri + Vue / TypeScript</p>
-                <p>界面与功能正在对照 Hello Minecraft! Launcher 重构。</p>
-                <p>HMCL 图标及壁纸沿用原项目资源与许可。当前迁移尚未完成。</p>
+                <BrandMark />
+                <p class="eyebrow">A LITTLE SPACE. INFINITE WORLDS.</p>
+                <h1>星屿 Aster</h1>
+                <p>留一片天地，给你的想象。</p>
+                <p class="subtitle">
+                  一个正在成长的独立 Minecraft 启动器。开发预览版，部分功能仍在完善。
+                </p>
+                <div class="about-credits">
+                  <h2>致谢</h2>
+                  <p>
+                    底层重构与交互研究参考 Hello Minecraft! Launcher 和
+                    PCL；部分游戏图标、默认皮肤和通用图标沿用 HMCL
+                    资源及其许可。星屿的品牌、界面与浮岛插画为本项目原创。
+                  </p>
+                  <small
+                    >感谢 PCL 作者龙腾猫跃及其贡献者公开研究资料。本项目与上述启动器及
+                    Mojang、Microsoft 无隶属关系。</small
+                  >
+                </div>
               </div></template
             >
           </section></Transition
