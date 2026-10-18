@@ -68,6 +68,15 @@ WebView2，调用正常 Tauri 命令，不替换 IPC、不增加测试命令，�
 打包资源构建：`npm run tauri build -- --no-bundle`。目前 bundle 关闭，
 安装器、应用签名、三端可见窗口运行、原生窗口圆角和 WebView 分发均需另行验收。
 
+Windows 单 EXE 发行必须使用 MSVC 工具链。上游 `webview2-com-sys` 在 MSVC 下静态链接
+WebView2 加载器，GNU 下仍动态导入 DLL。`scripts/verify-windows-exe.mjs` 检查普通和延迟
+PE 导入表，发现外置加载器则拒绝发行；打包不再复制 DLL，并移除输出目录中残留的旧加载器。
+原生验证将 EXE 单独复制到隔离目录，在该目录启动隐藏窗口并检查正常 IPC，避免构建目录
+中的 DLL 掩盖依赖。此变化不包含系统 WebView2 Runtime。
+
+从已验证 CI 产物打包时可传 `-BinaryRevision <构建提交>`，清单分别记录程序源码提交与
+打包脚本提交，避免将旧二进制误标为新构建。`-OutputName` 可指定新的发行目录，保留正在运行的旧程序。
+
 Windows 构建后可运行 `./scripts/package-windows.ps1`；使用父目录缓存时
 传入 `-TargetDir ../target`。脚本将程序及存在时必需的 GNU WebView2Loader.dll
 一起放入 `dist/aster-windows-x64/`，程序命名为 `AsterLauncher.exe`，

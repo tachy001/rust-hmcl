@@ -1,6 +1,6 @@
 # 星屿 Aster Launcher · 开发预览版
 
-解压全部文件后运行 AsterLauncher.exe。请保留同目录的 WebView2Loader.dll；Windows 需要 WebView2 Runtime。
+解压后运行 AsterLauncher.exe，也可以将这个 EXE 单独放在其他目录运行。WebView2 加载器已静态链接，不再分发 WebView2Loader.dll；Windows 仍需要系统 WebView2 Runtime。
 
 启动器本身无需 Java。Minecraft 仍需要 Java，可在启动器的 Java 管理中检测或下载。
 

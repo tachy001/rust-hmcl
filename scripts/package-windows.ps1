@@ -1,19 +1,23 @@
-param([string]$TargetDir = 'target')
+param([string]$TargetDir = 'target', [string]$OutputName = 'aster-windows-x64', [string]$BinaryRevision = '')
 $ErrorActionPreference = 'Stop'
 $taskRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $taskTarget = [IO.Path]::GetFullPath((Join-Path $taskRoot $TargetDir))
 $taskRelease = Join-Path $taskTarget 'release'
 $taskBinary = Join-Path $taskRelease 'rust-hmcl-desktop.exe'
 if (-not (Test-Path -LiteralPath $taskBinary)) { throw 'Build the Tauri desktop application before packaging.' }
-$taskOutput = [IO.Path]::GetFullPath((Join-Path $taskRoot 'dist/aster-windows-x64'))
+& node (Join-Path $PSScriptRoot 'verify-windows-exe.mjs') $taskBinary
+if ($LASTEXITCODE -ne 0) { throw 'Single executable packaging requires a statically linked WebView2 loader.' }
+if ($OutputName -notmatch '^aster-windows-x64(?:-[a-z0-9-]+)?$') { throw 'Invalid package output name.' }
+$taskOutput = [IO.Path]::GetFullPath((Join-Path $taskRoot ('dist/' + $OutputName)))
 if (-not $taskOutput.StartsWith($taskRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Output must stay inside the project.' }
 New-Item -ItemType Directory -Path $taskOutput -Force | Out-Null
+if ((Get-Item -LiteralPath $taskOutput).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Package output must not be a link.' }
 Copy-Item -LiteralPath $taskBinary -Destination (Join-Path $taskOutput 'AsterLauncher.exe') -Force
 $taskNames = @('AsterLauncher.exe', 'LICENSE', 'ATTRIBUTION.md', 'ASTER-ATTRIBUTION.md', 'README.md')
-$taskLoader = Join-Path $taskRelease 'WebView2Loader.dll'
+$taskLoader = Join-Path $taskOutput 'WebView2Loader.dll'
 if (Test-Path -LiteralPath $taskLoader) {
-  Copy-Item -LiteralPath $taskLoader -Destination $taskOutput -Force
-  $taskNames += 'WebView2Loader.dll'
+  if ((Get-Item -LiteralPath $taskLoader).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Old loader must not be a link.' }
+  Remove-Item -LiteralPath $taskLoader -Force
 }
 Copy-Item -LiteralPath (Join-Path $taskRoot 'LICENSE') -Destination $taskOutput -Force
 Copy-Item -LiteralPath (Join-Path $taskRoot 'assets/hmcl/ATTRIBUTION.md') -Destination $taskOutput -Force
@@ -21,13 +25,21 @@ Copy-Item -LiteralPath (Join-Path $taskRoot 'assets/aster/ATTRIBUTION.md') -Dest
 Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/ASTER-README.md') -Destination (Join-Path $taskOutput 'README.md') -Force
 $taskRevision = (& git -C $taskRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot read source revision.' }
+$taskBinaryRevision = $taskRevision
+if ($BinaryRevision) {
+  if ($BinaryRevision -notmatch '^[a-f0-9]{7,40}$') { throw 'Invalid binary source revision.' }
+  $taskBinaryRevision = (& git -C $taskRoot rev-parse --verify ($BinaryRevision + '^{commit}')).Trim()
+  if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve binary source revision.' }
+}
 $taskDirty = [bool](& git -C $taskRoot status --porcelain)
 $taskManifest = @{
   product = 'Aster Launcher'
   preview = $true
-  source_revision = $taskRevision
+  source_revision = $taskBinaryRevision
+  packaging_revision = $taskRevision
   source_dirty = $taskDirty
   frontend = 'Tauri + Vue + TypeScript'
+  webview2_loader = 'statically linked'
   migration_complete = $false
   built_files = @($taskNames | ForEach-Object { @{name=$_;sha256=(Get-FileHash -LiteralPath (Join-Path $taskOutput $_)).Hash} })
 }

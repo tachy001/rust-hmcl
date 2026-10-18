@@ -22,6 +22,8 @@ jobs:
       - run: cargo test -p rust-hmcl --lib --no-default-features --locked
       - run: npm run tauri build -- --no-bundle
       - if: runner.os == 'Windows'
+        run: node scripts/verify-windows-exe.mjs target/release/rust-hmcl-desktop.exe
+      - if: runner.os == 'Windows'
         run: npm run test:native
         env:
           HMCL_DESKTOP_BIN: ${{ github.workspace }}/target/release/rust-hmcl-desktop.exe
@@ -37,7 +39,6 @@ jobs:
           path: |
             target/release/rust-hmcl-desktop
             target/release/rust-hmcl-desktop.exe
-            target/release/WebView2Loader.dll
             LICENSE
             assets/hmcl/ATTRIBUTION.md
             assets/aster/ATTRIBUTION.md

@@ -3,12 +3,13 @@ import { chromium, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
-import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, stat, copyFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { localImportFixtures } from './local-import-fixtures.mjs';
 import { modpackFixture } from './modpack-fixtures.mjs';
+import { verifyWindowsExe } from './verify-windows-exe.mjs';
 
 if (process.platform !== 'win32')
   throw new Error('This native verification uses Windows WebView2.');
@@ -16,9 +17,15 @@ const root = resolve(import.meta.dirname, '..');
 const executable =
   process.env.HMCL_DESKTOP_BIN ?? join(root, '..', 'target', 'release', 'rust-hmcl-desktop.exe');
 await stat(executable);
+const executableImports = await verifyWindowsExe(executable);
 const tools = join(root, '.tools');
 await mkdir(tools, { recursive: true });
 const fixture = await mkdtemp(join(tools, 'native-ui-proof-'));
+// Only the EXE is copied. The build directory's DLLs cannot satisfy dependencies.
+const standalone = join(fixture, 'standalone');
+await mkdir(standalone);
+const standaloneExe = join(standalone, 'AsterLauncher.exe');
+await copyFile(executable, standaloneExe);
 const imports = await localImportFixtures(fixture);
 const output = join(root, 'dist', 'native-ui-proof');
 await mkdir(output, { recursive: true });
@@ -55,8 +62,8 @@ const port = reserve.address().port;
 await new Promise((resolve, reject) =>
   reserve.close((error) => (error ? reject(error) : resolve())),
 );
-const app = spawn(executable, ['--verify-hidden-ui'], {
-  cwd: root,
+const app = spawn(standaloneExe, ['--verify-hidden-ui'], {
+  cwd: standalone,
   windowsHide: true,
   env: { ...process.env, RUST_HMCL_DATA_DIR: fixture, HMCL_UI_PROOF_PORT: String(port) },
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -425,6 +432,9 @@ try {
       .update(await readFile(executable))
       .digest('hex'),
     fixture,
+    standaloneExe,
+    executableImports,
+    loaderDistribution: 'statically linked; EXE copied alone to an isolated directory',
     transport: 'real release Tauri / WebView2 / native IPC',
     layout,
     typography,
@@ -437,6 +447,7 @@ try {
     javaOrGameStarted: false,
     handwrittenFixtures: true,
     passed: [
+      'EXE runs alone from an isolated directory without WebView2Loader.dll',
       'hidden native window',
       'Aster home favorite persists through real native IPC',
       'four transparent antialiased corners without opaque page background',
