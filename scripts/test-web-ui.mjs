@@ -12,6 +12,7 @@ import { emphasized } from '../frontend/src/motion.ts';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { localImportFixtures } from './local-import-fixtures.mjs';
+import { modpackFixture } from './modpack-fixtures.mjs';
 const onlineModrinth = process.argv.includes('--online-modrinth');
 let modrinthProof = null;
 
@@ -149,11 +150,12 @@ try {
       assert.equal(args.folder, selection.folder);
       return selection.paths;
     }
+    if (command === 'pick_modpack') return pickerSelections.shift()?.path ?? null;
     const allowedModInstall =
       onlineModrinth && args?.job?.kind === 'install_mod' && args?.job?.id === 'online-fabric';
     if (
       command === 'start_job' &&
-      !['duplicate', 'rename', 'import_files'].includes(args?.job?.kind) &&
+      !['duplicate', 'rename', 'import_files', 'import_pack'].includes(args?.job?.kind) &&
       !allowedModInstall
     )
       throw Error('Headless UI verification never starts Java, games, downloads or installers.');
@@ -621,6 +623,74 @@ try {
   await page.setViewportSize({ width: 1080, height: 700 });
   await settle();
   await page.screenshot({ path: join(output, 'instances-dark.png') });
+  const pack = await modpackFixture(fixture);
+  const globalIsolation = (await rpc('snapshot')).config.isolated;
+  await page.getByRole('button', { name: '整合包', exact: true }).click();
+  pickerSelections.push({ path: pack.path });
+  await page.getByRole('button', { name: '选择整合包', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Aster Journey', exact: true })).toBeVisible();
+  const packName = page.getByRole('textbox', { name: '整合包实例名称', exact: true });
+  const packInstall = page.getByRole('button', { name: '安装到新实例', exact: true });
+  await expect(packName).toHaveValue('Aster Journey');
+  await expect(page.getByRole('switch', { name: /安装可选客户端文件/ })).not.toBeChecked();
+  await packName.fill('../escape');
+  await expect(packInstall).toBeDisabled();
+  await packName.fill('pack-base');
+  await expect(packInstall).toBeDisabled();
+  await packName.fill('1.20.1');
+  const beforePackConflict = (await rpc('task')).id;
+  await packInstall.click();
+  await expect(page.locator('.error-banner')).toContainText('已存在');
+  assert.equal((await rpc('task')).id, beforePackConflict);
+  await page.getByRole('button', { name: '关闭提示', exact: true }).click();
+  await packName.fill('Aster UI Pack');
+  await page
+    .locator('.page')
+    .last()
+    .evaluate((element) => (element.scrollTop = 0));
+  await settle();
+  await page.screenshot({ path: join(output, 'modpack-preview-dark.png') });
+  await page.setViewportSize({ width: 800, height: 560 });
+  await settle();
+  assert.equal(
+    await page
+      .locator('.page')
+      .last()
+      .evaluate((element) => element.scrollWidth > element.clientWidth),
+    false,
+  );
+  await page.screenshot({ path: join(output, 'modpack-preview-narrow.png') });
+  await packInstall.click();
+  await expect(
+    page.getByRole('heading', { name: 'Aster UI Pack 已准备好', exact: true }),
+  ).toBeVisible({ timeout: 10000 });
+  const installedPack = join(fixture, 'minecraft', 'versions', 'Aster UI Pack');
+  await expect(
+    page.getByRole('heading', { name: 'Aster UI Pack 已准备好', exact: true }),
+  ).toBeInViewport();
+  await assert.rejects(stat(join(installedPack, 'pack-staging')));
+  assert.equal(
+    await readFile(join(installedPack, 'game', 'config', 'aster.txt'), 'utf8'),
+    'client override wins',
+  );
+  await assert.rejects(stat(join(installedPack, 'game', 'mods', 'optional.jar')));
+  await assert.rejects(stat(join(installedPack, 'game', 'mods', 'server.jar')));
+  const afterPack = await rpc('snapshot');
+  assert.equal(afterPack.config.selected, 'Aster UI Pack');
+  assert.equal(afterPack.config.isolated, globalIsolation);
+  assert.equal(afterPack.config.version_settings['Aster UI Pack'].isolated, true);
+  assert.equal(
+    createHash('sha1')
+      .update(await readFile(pack.path))
+      .digest('hex'),
+    pack.sha1,
+  );
+  assert.deepEqual(
+    await readFile(join(fixture, 'minecraft', 'versions', 'pack-base', 'pack-base.jar')),
+    pack.client,
+  );
+  await page.getByRole('button', { name: '打开游戏库', exact: true }).click();
+  await page.setViewportSize({ width: 1080, height: 700 });
   if (onlineModrinth) {
     const fabric = join(fixture, 'minecraft', 'versions', 'online-fabric');
     await mkdir(fabric, { recursive: true });
@@ -731,6 +801,8 @@ try {
           'local mod search and vanilla discovery guard without network',
           'local import selection, cancellation, removal, exact bytes and conflict rejection',
           'ZIP and folder resource imports preserve sources and options without auto-enabling',
+          'mrpack preview, name and conflict guard, cached installation and client override precedence',
+          'mrpack instance isolates files and skips optional/server files without starting Java',
           'compatibility cancel and confirmation',
           'modal focus and Escape',
           '800px layout',

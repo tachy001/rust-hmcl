@@ -8,6 +8,7 @@ import HomeDashboard from './HomeDashboard.vue';
 import FavoriteToggle from './FavoriteToggle.vue';
 import ModLibrary from './ModLibrary.vue';
 import LocalImport from './LocalImport.vue';
+import PackInstaller from './PackInstaller.vue';
 import InstanceSettings from './InstanceSettings.vue';
 import {
   api,
@@ -28,6 +29,7 @@ type Page =
   | 'accounts'
   | 'versions'
   | 'download'
+  | 'packs'
   | 'java'
   | 'settings'
   | 'logs'
@@ -95,6 +97,7 @@ const navigation: [Page, string, string][] = [
   ['accounts', 'person', '账户'],
   ['versions', 'folder', '游戏库'],
   ['download', 'download', '下载'],
+  ['packs', 'archive', '整合包'],
   ['java', 'deployed_code', 'Java 管理'],
   ['settings', 'settings', '设置'],
   ['logs', 'menu', '日志'],
@@ -803,6 +806,13 @@ onUnmounted(() => {
                 </div>
               </div>
             </template>
+            <PackInstaller
+              v-else-if="page === 'packs'"
+              :task="task"
+              :instances="data?.instances ?? []"
+              :submit="start"
+              @library="go('versions')"
+            />
             <template v-else-if="page === 'java'">
               <div class="toolbar">
                 <h1>Java 管理</h1>

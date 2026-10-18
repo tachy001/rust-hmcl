@@ -93,7 +93,22 @@ export interface Pack {
   compatible: boolean;
   warning: string | null;
 }
+export interface ModpackPreview {
+  name: string;
+  version: string;
+  summary: string;
+  minecraft: string;
+  loader: string | null;
+  loader_version: string | null;
+  files: number;
+  required: number;
+  optional: number;
+  server_only: number;
+  source_sha1: string;
+  suggested_name: string;
+}
 export type Job =
+  | { kind: 'import_pack'; path: string; id: string; optional: boolean; source_sha1: string }
   | { kind: 'import_files'; id: string; content: 'mods' | 'resources'; paths: string[] }
   | { kind: 'launch' | 'install' | 'repair' | 'fabric' | 'quilt'; id: string }
   | { kind: 'java'; major: number }
@@ -101,6 +116,8 @@ export type Job =
   | { kind: 'rename'; id: string; name: string }
   | { kind: 'duplicate'; id: string; name: string; copy_saves: boolean };
 export const api = {
+  pickModpack: () => invoke<string | null>('pick_modpack'),
+  inspectModpack: (path: string) => invoke<ModpackPreview>('inspect_modpack', { path }),
   pickImport: (content: 'mods' | 'resources', folder = false) =>
     invoke<string[]>('pick_import', { content, folder }),
   snapshot: () => invoke<Snapshot>('snapshot'),

@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { localImportFixtures } from './local-import-fixtures.mjs';
+import { modpackFixture } from './modpack-fixtures.mjs';
 
 if (process.platform !== 'win32')
   throw new Error('This native verification uses Windows WebView2.');
@@ -88,8 +89,23 @@ try {
   }
   if (!ready) throw new Error(`WebView2 debugger did not become ready: ${processError}`);
   browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
-  const pages = browser.contexts().flatMap((context) => context.pages());
-  assert.ok(pages.length, 'Native WebView target missing');
+  const targetStart = Date.now();
+  let pages = browser.contexts().flatMap((context) => context.pages());
+  // The browser debugger becomes ready before WebView2 creates its first page on CI.
+  // Keep observing this same live app/connection instead of restarting the process.
+  while (!pages.length && Date.now() - targetStart < 45000) {
+    if (spawnError) throw spawnError;
+    if (app.exitCode !== null)
+      throw new Error(
+        `Desktop exited while waiting for WebView (${app.exitCode}): ${processError}`,
+      );
+    if (!browser.isConnected())
+      throw new Error('Native debugger disconnected before page creation');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    pages = browser.contexts().flatMap((context) => context.pages());
+  }
+  const startupWaitMs = Date.now() - targetStart;
+  assert.ok(pages.length, `Native WebView target did not appear in 45 seconds: ${processError}`);
   const page = pages.find((item) => item.url().includes('tauri.localhost')) ?? pages[0];
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -361,6 +377,47 @@ try {
   assert.equal((await invoke('snapshot')).config.version_settings['native-copy'].isolated, true);
   assert.equal((await invoke('task')).running, false);
   assert.equal(await invoke('plugin:window|is_visible', { label: 'main' }), false);
+  const pack = await modpackFixture(fixture);
+  await page.getByRole('button', { name: '整合包', exact: true }).click();
+  await expect(page.locator('.pack-drop-zone')).toContainText('选择或拖入');
+  await settle();
+  await emitDrop([pack.path]);
+  await expect(page.getByRole('heading', { name: 'Aster Journey', exact: true })).toBeVisible();
+  const packName = page.getByRole('textbox', { name: '整合包实例名称', exact: true });
+  await packName.fill('Aster Native Pack');
+  await page
+    .locator('.page')
+    .last()
+    .evaluate((element) => (element.scrollTop = 0));
+  await page.screenshot({ path: join(output, 'native-modpack-preview.png'), omitBackground: true });
+  await page.getByRole('button', { name: '安装到新实例', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Aster Native Pack 已准备好', exact: true }),
+  ).toBeVisible({ timeout: 10000 });
+  const packDir = join(fixture, 'minecraft', 'versions', 'Aster Native Pack');
+  await expect(
+    page.getByRole('heading', { name: 'Aster Native Pack 已准备好', exact: true }),
+  ).toBeInViewport();
+  await assert.rejects(stat(join(packDir, 'pack-staging')));
+  assert.equal(
+    await readFile(join(packDir, 'game', 'config', 'aster.txt'), 'utf8'),
+    'client override wins',
+  );
+  const afterPack = await invoke('snapshot');
+  assert.equal(afterPack.config.selected, 'Aster Native Pack');
+  assert.equal(afterPack.config.version_settings['Aster Native Pack'].isolated, true);
+  assert.equal(
+    createHash('sha1')
+      .update(await readFile(pack.path))
+      .digest('hex'),
+    pack.sha1,
+  );
+  await assert.rejects(stat(join(packDir, 'game', 'mods', 'optional.jar')));
+  await assert.rejects(stat(join(packDir, 'game', 'mods', 'server.jar')));
+  await page.screenshot({
+    path: join(output, 'native-modpack-installed.png'),
+    omitBackground: true,
+  });
   assert.deepEqual(errors, []);
   const proof = {
     executable,
@@ -375,6 +432,7 @@ try {
     nativeSize,
     url: page.url(),
     nativeWindowVisible: false,
+    startupWaitMs,
     desktopInput: false,
     javaOrGameStarted: false,
     handwrittenFixtures: true,
@@ -393,13 +451,14 @@ try {
       'local mod filtering, native loader guard and invalid project rejection',
       'synthetic native drop events drive local import preview, exclusive copy and conflict feedback',
       'ZIP and folder resource imports retain sources and do not enable automatically',
+      'mrpack preview and cached native installation with isolated config and client overrides',
       'resource compatibility confirmation before options write',
       'native background copy task and completion refresh',
     ],
     limitations: [
       'Windows only',
       'visible compositor edges, corner hit testing and native maximization not verified',
-      'game launching and installers not exercised',
+      'Java/game launching and remote game/loader downloads not exercised; mrpack uses cached handwritten samples',
       'native file picker and physical OS drag gestures not exercised; drop event payloads are synthetic',
     ],
   };

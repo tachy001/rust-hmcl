@@ -29,12 +29,14 @@ async fn update_config(config: Config, service: State<'_, Service>) -> Result<Sn
     blocking(move || service.update_config(config)).await
 }
 #[tauri::command]
-fn task(service: State<'_, Service>) -> Result<Task, String> {
-    service.task().map_err(|error| error.to_string())
+async fn task(service: State<'_, Service>) -> Result<Task, String> {
+    let service = service.inner().clone();
+    blocking(move || service.task()).await
 }
 #[tauri::command]
-fn start_job(job: Job, service: State<'_, Service>) -> Result<u64, String> {
-    service.start(job).map_err(|error| format!("{error:#}"))
+async fn start_job(job: Job, service: State<'_, Service>) -> Result<u64, String> {
+    let service = service.inner().clone();
+    blocking(move || service.start(job)).await
 }
 #[tauri::command]
 fn cancel_job(service: State<'_, Service>) {
@@ -75,6 +77,34 @@ async fn pick_import(
             .collect()
     })
     .await
+}
+#[tauri::command]
+async fn pick_modpack() -> Result<Option<String>, String> {
+    blocking(move || {
+        anyhow::ensure!(
+            !std::env::args().any(|argument| argument == "--verify-hidden-ui"),
+            "隐藏验证模式不打开文件选择器"
+        );
+        rfd::FileDialog::new()
+            .set_title("选择整合包")
+            .add_filter("Modrinth 整合包", &["mrpack"])
+            .pick_file()
+            .map(|path| {
+                path.to_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| anyhow::anyhow!("文件路径不是有效文本"))
+            })
+            .transpose()
+    })
+    .await
+}
+#[tauri::command]
+async fn inspect_modpack(
+    path: String,
+    service: State<'_, Service>,
+) -> Result<rust_hmcl::modpack::Preview, String> {
+    let service = service.inner().clone();
+    blocking(move || service.inspect_modpack(&path)).await
 }
 #[tauri::command]
 async fn mod_environment(
@@ -167,6 +197,8 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            pick_modpack,
+            inspect_modpack,
             pick_import,
             mod_environment,
             search_mods,

@@ -920,6 +920,277 @@ select:focus {
     border-color 0.2s,
     background-color 0.2s;
 }
+.pack-installer .toolbar h1 {
+  margin: 0;
+}
+.pack-drop-zone {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 22px;
+  border: 1px dashed var(--line);
+  background: linear-gradient(120deg, var(--selected), var(--surface));
+  border-radius: 14px;
+  margin-bottom: 22px;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s;
+}
+.pack-drop-zone.dragging {
+  border-color: var(--primary);
+  background: var(--selected);
+}
+.pack-source-icon {
+  display: grid;
+  place-content: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  background: var(--surface);
+  border-radius: 13px;
+  color: var(--primary);
+}
+.pack-source-icon .icon {
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+}
+.pack-drop-zone h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+.pack-drop-zone p {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.pack-drop-zone small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.pack-drop-zone > button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.pack-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #d87771;
+  font-size: 12px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  padding: 15px;
+  background: var(--surface);
+  border-radius: 10px;
+}
+.pack-ready {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--selected);
+}
+.pack-ready > .icon {
+  color: var(--primary);
+}
+.pack-ready h2 {
+  font-size: 14px;
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+.pack-ready p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pack-ready > button {
+  margin-left: auto;
+}
+.pack-preview {
+  padding: 24px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.pack-preview-heading {
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+.pack-preview-heading > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pack-preview h2 {
+  font-size: 23px;
+  margin: 9px 0;
+}
+.pack-preview-heading p {
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin: 0;
+}
+.pack-version {
+  padding: 6px 9px;
+  background: var(--field);
+  color: var(--muted);
+  font-size: 10px;
+  border-radius: 20px;
+  max-width: 160px;
+  overflow-wrap: anywhere;
+}
+.pack-environment {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.pack-environment > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pack-environment img,
+.pack-environment .icon {
+  width: 17px;
+  height: 17px;
+  flex-basis: 17px;
+}
+.pack-file-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 18px 0;
+  margin-bottom: 20px;
+}
+.pack-file-counts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.pack-file-counts b {
+  font-size: 22px;
+  font-weight: 550;
+}
+.pack-file-counts span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.pack-preview fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.pack-name-label {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+}
+.pack-name-label input {
+  width: 100%;
+}
+.pack-name-error {
+  font-size: 11px;
+  color: #d87771;
+}
+.pack-preview .switch-row {
+  flex-direction: row;
+  margin-top: 12px;
+}
+.pack-preview .switch-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.pack-preview .switch-row small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.pack-preview .switch-row input {
+  flex-shrink: 0;
+}
+.dark .error-banner {
+  background: #432d31;
+  color: #ffb4ac;
+  border: 1px solid #765052;
+}
+.pack-isolation {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  margin: 15px 0 20px;
+  padding: 13px;
+  background: var(--field);
+  border-radius: 9px;
+}
+.pack-isolation p {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.7;
+}
+.pack-isolation b {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+}
+.pack-install-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pack-install-actions > span {
+  color: var(--muted);
+  font-size: 10px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pack-footnote {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.8;
+  margin: 18px 0;
+}
+@media (max-width: 950px) {
+  .pack-drop-zone {
+    flex-wrap: wrap;
+    padding: 18px;
+  }
+  .pack-drop-zone > button {
+    margin-left: 64px;
+  }
+  .pack-preview {
+    padding: 18px;
+  }
+  .pack-ready {
+    flex-wrap: wrap;
+  }
+}
 .local-import.dragging {
   border-color: var(--primary);
   background: var(--selected);

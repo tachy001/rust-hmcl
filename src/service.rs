@@ -70,6 +70,12 @@ pub enum Job {
         content: crate::imports::Content,
         paths: Vec<String>,
     },
+    ImportPack {
+        path: String,
+        id: String,
+        optional: bool,
+        source_sha1: String,
+    },
     Duplicate {
         id: String,
         name: String,
@@ -203,6 +209,9 @@ impl Service {
     pub fn mod_files(&self) -> Result<Vec<mods::ModFile>> {
         mods::list(&mods::directory(&self.config()?)?)
     }
+    pub fn inspect_modpack(&self, path: &str) -> Result<crate::modpack::Preview> {
+        crate::modpack::preview(Path::new(&self.config()?.game_dir), Path::new(path))
+    }
     fn mod_config(&self, id: &str) -> Result<Config> {
         let mut config = self.config()?;
         game::version_dir(Path::new(&config.game_dir), id)?;
@@ -299,6 +308,19 @@ impl Service {
         }
         let config = self.config()?;
         match &job {
+            Job::ImportPack {
+                path,
+                id,
+                source_sha1,
+                ..
+            } => {
+                crate::modpack::validate_target(
+                    Path::new(&config.game_dir),
+                    Path::new(path),
+                    id,
+                    source_sha1,
+                )?;
+            }
             Job::ImportFiles { id, content, paths } => {
                 crate::imports::validate(&config, id, *content, paths)?;
             }
@@ -372,6 +394,26 @@ impl Service {
             worker.threads = config.download_threads;
             let root = Path::new(&config.game_dir);
             match job {
+                Job::ImportPack {
+                    path,
+                    id,
+                    optional,
+                    source_sha1,
+                } => {
+                    worker.import_pack_checked(
+                        root,
+                        Path::new(&path),
+                        &id,
+                        optional,
+                        Some(&source_sha1),
+                    )?;
+                    config
+                        .version_settings
+                        .entry(id.clone())
+                        .or_default()
+                        .isolated = Some(true);
+                    config.selected = id;
+                }
                 Job::ImportFiles { id, content, paths } => {
                     crate::imports::run(&config, &id, content, &paths, &worker)?;
                 }
