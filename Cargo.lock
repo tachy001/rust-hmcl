@@ -4428,6 +4428,7 @@ name = "rust-hmcl-desktop"
 version = "0.3.11"
 dependencies = [
  "anyhow",
+ "rfd",
  "rust-hmcl",
  "serde",
  "tauri",

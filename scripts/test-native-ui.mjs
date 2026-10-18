@@ -7,6 +7,7 @@ import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
+import { localImportFixtures } from './local-import-fixtures.mjs';
 
 if (process.platform !== 'win32')
   throw new Error('This native verification uses Windows WebView2.');
@@ -17,6 +18,7 @@ await stat(executable);
 const tools = join(root, '.tools');
 await mkdir(tools, { recursive: true });
 const fixture = await mkdtemp(join(tools, 'native-ui-proof-'));
+const imports = await localImportFixtures(fixture);
 const output = join(root, 'dist', 'native-ui-proof');
 await mkdir(output, { recursive: true });
 const version = join(fixture, 'minecraft', 'versions', 'native-fixture');
@@ -272,6 +274,44 @@ try {
   });
   assert.equal(invalidMod, true);
   assert.equal((await invoke('task')).running, false);
+  await page.getByRole('button', { name: '已安装模组', exact: false }).click();
+  await expect(page.getByRole('region', { name: '导入本地模组', exact: true })).toBeVisible();
+  await settle();
+  const emitDrop = async (paths) => {
+    await invoke('plugin:event|emit_to', {
+      target: { kind: 'Webview', label: 'main' },
+      event: 'tauri://drag-drop',
+      payload: { paths, position: { x: 100, y: 100 } },
+    });
+  };
+  const importPanel = page.getByRole('region', { name: '导入本地模组', exact: true });
+  await expect(importPanel).toContainText('选择或拖入');
+  await emitDrop([imports.mod]);
+  await expect(importPanel.getByRole('listitem')).toHaveCount(1);
+  await page.screenshot({ path: join(output, 'native-local-import.png'), omitBackground: true });
+  await importPanel.getByRole('button', { name: '导入 1 项', exact: true }).click();
+  await expect(
+    page.locator('.mod-library .list').getByText('imported-sample.jar', { exact: true }),
+  ).toBeVisible();
+  assert.deepEqual(
+    await readFile(join(game, 'mods', 'imported-sample.jar')),
+    await readFile(imports.mod),
+  );
+  const beforeDuplicate = (await invoke('task')).id;
+  await emitDrop([imports.mod]);
+  await importPanel.getByRole('button', { name: '导入 1 项', exact: true }).click();
+  await expect(page.locator('.error-banner')).toContainText('已存在，不会覆盖');
+  assert.equal((await invoke('task')).id, beforeDuplicate);
+  await importPanel.getByRole('button', { name: '清空', exact: true }).click();
+  const pickerBlocked = await page.evaluate(async () => {
+    try {
+      await window.__TAURI_INTERNALS__.invoke('pick_import', { content: 'mods', folder: false });
+      return '';
+    } catch (error) {
+      return String(error);
+    }
+  });
+  assert.match(pickerBlocked, /隐藏验证模式不打开文件选择器/);
   await page.getByRole('button', { name: '资源包管理', exact: true }).click();
   const checkbox = page.getByRole('checkbox', { name: '启用 Native Pack', exact: true });
   await checkbox.click();
@@ -282,6 +322,27 @@ try {
   await page.getByRole('button', { name: '确认', exact: true }).click();
   await expect(checkbox).toBeChecked();
   assert.match(await readFile(join(game, 'options.txt'), 'utf8'), /file\/Native Pack/);
+  const originalOptions = await readFile(join(game, 'options.txt'));
+  const resourceImport = page.getByRole('region', { name: '导入本地资源包', exact: true });
+  await expect(resourceImport).toContainText('选择或拖入');
+  await emitDrop([imports.zip, imports.folder]);
+  await expect(resourceImport.getByRole('listitem')).toHaveCount(2);
+  await resourceImport.getByRole('button', { name: '导入 2 项', exact: true }).click();
+  await expect(
+    page.getByRole('checkbox', { name: '启用 Imported ZIP', exact: true }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByRole('checkbox', { name: '启用 Imported Folder', exact: true }),
+  ).not.toBeChecked();
+  assert.deepEqual(
+    await readFile(join(game, 'resourcepacks', 'Imported ZIP.zip')),
+    await readFile(imports.zip),
+  );
+  assert.deepEqual(
+    await readFile(join(game, 'resourcepacks', 'Imported Folder', 'assets', 'sample.txt')),
+    await readFile(join(imports.folder, 'assets', 'sample.txt')),
+  );
+  assert.deepEqual(await readFile(join(game, 'options.txt')), originalOptions);
   await page.getByRole('button', { name: '返回游戏列表', exact: true }).click();
   await page.getByRole('button', { name: 'native-fixture更多操作', exact: true }).click();
   await page.getByRole('menuitem', { name: '复制实例', exact: true }).click();
@@ -330,6 +391,8 @@ try {
       'theme',
       'mod toggle round trip',
       'local mod filtering, native loader guard and invalid project rejection',
+      'synthetic native drop events drive local import preview, exclusive copy and conflict feedback',
+      'ZIP and folder resource imports retain sources and do not enable automatically',
       'resource compatibility confirmation before options write',
       'native background copy task and completion refresh',
     ],
@@ -337,6 +400,7 @@ try {
       'Windows only',
       'visible compositor edges, corner hit testing and native maximization not verified',
       'game launching and installers not exercised',
+      'native file picker and physical OS drag gestures not exercised; drop event payloads are synthetic',
     ],
   };
   await writeFile(join(output, 'proof.json'), JSON.stringify(proof, null, 2));

@@ -2,7 +2,9 @@
 //! Building with `--no-default-features --lib` does not compile egui or a WebView.
 pub mod catalog;
 pub mod config;
+mod file_ops;
 pub mod game;
+pub mod imports;
 pub mod instance_ops;
 pub mod java_runtime;
 pub mod loaders;

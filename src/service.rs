@@ -65,6 +65,11 @@ pub enum Job {
         id: String,
         project: String,
     },
+    ImportFiles {
+        id: String,
+        content: crate::imports::Content,
+        paths: Vec<String>,
+    },
     Duplicate {
         id: String,
         name: String,
@@ -294,6 +299,9 @@ impl Service {
         }
         let config = self.config()?;
         match &job {
+            Job::ImportFiles { id, content, paths } => {
+                crate::imports::validate(&config, id, *content, paths)?;
+            }
             Job::InstallMod { id, project } => {
                 crate::modrinth::validate_project(project)?;
                 self.mod_environment(id)?;
@@ -364,6 +372,9 @@ impl Service {
             worker.threads = config.download_threads;
             let root = Path::new(&config.game_dir);
             match job {
+                Job::ImportFiles { id, content, paths } => {
+                    crate::imports::run(&config, &id, content, &paths, &worker)?;
+                }
                 Job::Launch { id } => {
                     config.selected = id;
                     worker.launch(&config)?;

@@ -94,12 +94,15 @@ export interface Pack {
   warning: string | null;
 }
 export type Job =
+  | { kind: 'import_files'; id: string; content: 'mods' | 'resources'; paths: string[] }
   | { kind: 'launch' | 'install' | 'repair' | 'fabric' | 'quilt'; id: string }
   | { kind: 'java'; major: number }
   | { kind: 'install_mod'; id: string; project: string }
   | { kind: 'rename'; id: string; name: string }
   | { kind: 'duplicate'; id: string; name: string; copy_saves: boolean };
 export const api = {
+  pickImport: (content: 'mods' | 'resources', folder = false) =>
+    invoke<string[]>('pick_import', { content, folder }),
   snapshot: () => invoke<Snapshot>('snapshot'),
   save: (config: Config) => invoke<Snapshot>('update_config', { config }),
   task: () => invoke<Task>('task'),

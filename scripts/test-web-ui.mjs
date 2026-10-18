@@ -11,6 +11,7 @@ import { resolve, join, sep, extname } from 'node:path';
 import { emphasized } from '../frontend/src/motion.ts';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { localImportFixtures } from './local-import-fixtures.mjs';
 const onlineModrinth = process.argv.includes('--online-modrinth');
 let modrinthProof = null;
 
@@ -18,6 +19,8 @@ const root = resolve(import.meta.dirname, '..');
 const output = join(root, 'dist', 'web-ui-proof');
 await mkdir(output, { recursive: true });
 const fixture = await mkdtemp(join(root, '..', '.tools', 'web-ui-proof-'));
+const imports = await localImportFixtures(fixture);
+const pickerSelections = [];
 const version = join(fixture, 'minecraft', 'versions', '1.20.1');
 const game = join(version, 'game');
 await mkdir(join(game, 'resourcepacks', 'Demo Pack'), { recursive: true });
@@ -139,11 +142,18 @@ try {
     reducedMotion: 'no-preference',
   });
   await context.exposeBinding('__hmclInvoke', async (_source, command, args) => {
+    if (command === 'pick_import') {
+      const selection = pickerSelections.shift();
+      if (!selection) return [];
+      assert.equal(args.content, selection.content);
+      assert.equal(args.folder, selection.folder);
+      return selection.paths;
+    }
     const allowedModInstall =
       onlineModrinth && args?.job?.kind === 'install_mod' && args?.job?.id === 'online-fabric';
     if (
       command === 'start_job' &&
-      !['duplicate', 'rename'].includes(args?.job?.kind) &&
+      !['duplicate', 'rename', 'import_files'].includes(args?.job?.kind) &&
       !allowedModInstall
     )
       throw Error('Headless UI verification never starts Java, games, downloads or installers.');
@@ -154,13 +164,14 @@ try {
     const listeners = new Map();
     let callbackId = 0;
     window.__hmclWindowState = { maximized: false, fullscreen: false };
-    window.__hmclResize = () => {
-      for (const handler of listeners.values())
-        callbacks.get(handler)?.({
-          event: 'tauri://resize',
-          payload: { width: innerWidth, height: innerHeight },
-        });
+    window.__hmclEmit = (event, payload) => {
+      for (const listener of listeners.values())
+        if (listener.event === event) callbacks.get(listener.handler)?.({ event, payload });
     };
+    window.__hmclResize = () =>
+      window.__hmclEmit('tauri://resize', { width: innerWidth, height: innerHeight });
+    window.__hmclListenerCount = (event) =>
+      [...listeners.values()].filter((listener) => listener.event === event).length;
     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
       unregisterListener: (_event, id) => listeners.delete(id),
     };
@@ -175,7 +186,7 @@ try {
         if (command === 'plugin:window|is_maximized') return window.__hmclWindowState.maximized;
         if (command === 'plugin:window|is_fullscreen') return window.__hmclWindowState.fullscreen;
         if (command === 'plugin:event|listen') {
-          listeners.set(args.handler, args.handler);
+          listeners.set(args.handler, { handler: args.handler, event: args.event });
           return args.handler;
         }
         if (command === 'plugin:event|unlisten') return;
@@ -374,6 +385,45 @@ try {
   assert.ok((await stat(join(game, 'mods', 'sample.jar.disabled'))).isFile());
   await page.getByRole('button', { name: '启用', exact: true }).click();
   await expect(page.getByText('sample.jar', { exact: true })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => window.__hmclListenerCount('tauri://drag-drop')))
+    .toBe(1);
+  const modImport = page.getByRole('region', { name: '导入本地模组', exact: true });
+  pickerSelections.push({
+    content: 'mods',
+    folder: false,
+    paths: [imports.mod, imports.removedMod],
+  });
+  await modImport.getByRole('button', { name: '选择文件', exact: true }).click();
+  await expect(modImport.getByRole('listitem')).toHaveCount(2);
+  await modImport.getByRole('button', { name: '移除 not-selected.jar', exact: true }).click();
+  await expect(modImport.getByRole('listitem')).toHaveCount(1);
+  await modImport.getByRole('button', { name: '选择文件', exact: true }).click();
+  await expect(modImport.getByRole('listitem')).toHaveCount(1); // Cancelling keeps the existing selection.
+  await settle();
+  await page.screenshot({ path: join(output, 'local-mod-import-selection.png') });
+  await modImport.getByRole('button', { name: '导入 1 项', exact: true }).click();
+  await expect(
+    page.locator('.mod-library .list').getByText('imported-sample.jar', { exact: true }),
+  ).toBeVisible();
+  assert.deepEqual(
+    await readFile(join(game, 'mods', 'imported-sample.jar')),
+    await readFile(imports.mod),
+  );
+  await assert.rejects(stat(join(game, 'mods', 'not-selected.jar')));
+  await page.evaluate(
+    (paths) => window.__hmclEmit('tauri://drag-drop', { paths, position: { x: 0, y: 0 } }),
+    [imports.mod],
+  );
+  const beforeConflict = (await rpc('task')).id;
+  await modImport.getByRole('button', { name: '导入 1 项', exact: true }).click();
+  await expect(page.locator('.error-banner')).toContainText('已存在，不会覆盖');
+  assert.equal((await rpc('task')).id, beforeConflict);
+  assert.deepEqual(
+    await readFile(join(game, 'mods', 'imported-sample.jar')),
+    await readFile(imports.mod),
+  );
+  await modImport.getByRole('button', { name: '清空', exact: true }).click();
   const modFilter = page.getByRole('searchbox', { name: '筛选已安装模组', exact: true });
   await modFilter.fill('does-not-exist');
   await expect(page.getByText('没有匹配的模组', { exact: true })).toBeVisible();
@@ -397,6 +447,35 @@ try {
   await page.getByRole('button', { name: '确认', exact: true }).click();
   await expect(checkbox).toBeChecked();
   assert.match(await readFile(join(game, 'options.txt'), 'utf8'), /file\/Demo Pack/);
+  await expect
+    .poll(() => page.evaluate(() => window.__hmclListenerCount('tauri://drag-drop')))
+    .toBe(1);
+  const packImport = page.getByRole('region', { name: '导入本地资源包', exact: true });
+  const beforeImportOptions = await readFile(join(game, 'options.txt'));
+  pickerSelections.push({ content: 'resources', folder: false, paths: [imports.zip] });
+  await packImport.getByRole('button', { name: '选择文件', exact: true }).click();
+  await packImport.getByRole('button', { name: '导入 1 项', exact: true }).click();
+  await expect(
+    page.getByRole('checkbox', { name: '启用 Imported ZIP', exact: true }),
+  ).not.toBeChecked();
+  assert.deepEqual(
+    await readFile(join(game, 'resourcepacks', 'Imported ZIP.zip')),
+    await readFile(imports.zip),
+  );
+  pickerSelections.push({ content: 'resources', folder: true, paths: [imports.folder] });
+  await packImport.getByRole('button', { name: '选择文件夹', exact: true }).click();
+  await packImport.getByRole('button', { name: '导入 1 项', exact: true }).click();
+  await expect(
+    page.getByRole('checkbox', { name: '启用 Imported Folder', exact: true }),
+  ).not.toBeChecked();
+  assert.deepEqual(
+    await readFile(join(game, 'resourcepacks', 'Imported Folder', 'assets', 'sample.txt')),
+    await readFile(join(imports.folder, 'assets', 'sample.txt')),
+  );
+  assert.ok(
+    (await stat(join(game, 'resourcepacks', 'Imported Folder', 'assets', 'empty'))).isDirectory(),
+  );
+  assert.deepEqual(await readFile(join(game, 'options.txt')), beforeImportOptions);
   await page.setViewportSize({ width: 800, height: 560 });
   await page.screenshot({ path: join(output, 'resource-dark-narrow.png') });
   assert.equal(
@@ -650,6 +729,8 @@ try {
           'restoring inheritance only persists after explicit save',
           'mod rename round trip',
           'local mod search and vanilla discovery guard without network',
+          'local import selection, cancellation, removal, exact bytes and conflict rejection',
+          'ZIP and folder resource imports preserve sources and options without auto-enabling',
           'compatibility cancel and confirmation',
           'modal focus and Escape',
           '800px layout',

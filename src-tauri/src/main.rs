@@ -41,6 +41,42 @@ fn cancel_job(service: State<'_, Service>) {
     service.cancel()
 }
 #[tauri::command]
+async fn pick_import(
+    content: rust_hmcl::imports::Content,
+    folder: bool,
+) -> Result<Vec<String>, String> {
+    blocking(move || {
+        anyhow::ensure!(
+            !std::env::args().any(|argument| argument == "--verify-hidden-ui"),
+            "隐藏验证模式不打开文件选择器"
+        );
+        let dialog = rfd::FileDialog::new().set_title("选择要导入的本地内容");
+        let paths = match (content, folder) {
+            (rust_hmcl::imports::Content::Mods, false) => dialog
+                .add_filter("Minecraft 模组", &["jar"])
+                .pick_files()
+                .unwrap_or_default(),
+            (rust_hmcl::imports::Content::Resources, false) => dialog
+                .add_filter("资源包", &["zip"])
+                .pick_files()
+                .unwrap_or_default(),
+            (rust_hmcl::imports::Content::Resources, true) => {
+                dialog.pick_folder().into_iter().collect()
+            }
+            _ => anyhow::bail!("模组导入不支持文件夹"),
+        };
+        paths
+            .into_iter()
+            .map(|path| {
+                path.to_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| anyhow::anyhow!("文件路径不是有效文本"))
+            })
+            .collect()
+    })
+    .await
+}
+#[tauri::command]
 async fn mod_environment(
     id: String,
     service: State<'_, Service>,
@@ -131,6 +167,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            pick_import,
             mod_environment,
             search_mods,
             snapshot,

@@ -7,6 +7,7 @@ import BrandMark from './BrandMark.vue';
 import HomeDashboard from './HomeDashboard.vue';
 import FavoriteToggle from './FavoriteToggle.vue';
 import ModLibrary from './ModLibrary.vue';
+import LocalImport from './LocalImport.vue';
 import InstanceSettings from './InstanceSettings.vue';
 import {
   api,
@@ -178,10 +179,15 @@ async function start(job: Job) {
     if (!task.value.running) {
       await refresh();
       await loadPage();
-      if (task.value.error) fail(task.value.error);
+      if (task.value.error) {
+        fail(task.value.error);
+        return false;
+      }
     }
+    return true;
   } catch (cause) {
     fail(cause);
+    return false;
   }
 }
 async function launch(id = data.value?.config.selected) {
@@ -942,6 +948,7 @@ onUnmounted(() => {
                 :mods="mods"
                 :busy="task.running"
                 :loading="loading"
+                :submit="start"
                 @refresh="loadPage"
                 @toggle="toggleMod"
                 @start="start"
@@ -952,6 +959,14 @@ onUnmounted(() => {
                   <h1>资源包管理</h1>
                   <button :disabled="loading" @click="loadPage"><Icon name="refresh" />刷新</button>
                 </div>
+                <LocalImport
+                  v-if="data"
+                  :key="data.config.selected"
+                  :id="data.config.selected"
+                  content="resources"
+                  :busy="task.running"
+                  :submit="start"
+                />
                 <div class="list">
                   <div v-for="pack in packs" :key="pack.name" class="list-row">
                     <input

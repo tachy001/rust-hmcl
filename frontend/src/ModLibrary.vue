@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import Icon from './Icon.vue';
+import LocalImport from './LocalImport.vue';
 import { api, type Job, type Mod, type ModEnvironment, type ModProject } from './api';
-const props = defineProps<{ id: string; mods: Mod[]; busy: boolean; loading: boolean }>();
+const props = defineProps<{
+  id: string;
+  mods: Mod[];
+  busy: boolean;
+  loading: boolean;
+  submit: (job: Job) => Promise<boolean>;
+}>();
 const emit = defineEmits<{
   refresh: [];
   toggle: [name: string];
@@ -80,6 +87,7 @@ const downloads = (value: number) =>
       </button>
     </div>
     <template v-if="view === 'local'">
+      <LocalImport :id="id" content="mods" :busy="busy" :submit="submit" />
       <div class="mod-summary">
         <span>{{ enabled }} 个启用 · {{ mods.length - enabled }} 个禁用</span
         ><span>更改会在下次启动游戏时生效</span>

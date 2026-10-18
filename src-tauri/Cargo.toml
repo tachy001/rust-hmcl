@@ -12,3 +12,4 @@ tauri = { version = "2", features = ["macos-private-api"] }
 rust-hmcl = { path = "..", default-features = false }
 serde = { version = "1", features = ["derive"] }
 anyhow = "1"
+rfd = "0.15"

@@ -910,6 +910,114 @@ select:focus {
 .mod-library .toolbar h1 {
   margin: 0;
 }
+.local-import {
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 17px;
+  margin: 0 0 20px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  transition:
+    border-color 0.2s,
+    background-color 0.2s;
+}
+.local-import.dragging {
+  border-color: var(--primary);
+  background: var(--selected);
+}
+.import-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.import-symbol {
+  display: grid;
+  place-content: center;
+  flex: 0 0 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: var(--primary);
+  background: var(--selected);
+}
+.import-heading b {
+  font-size: 12px;
+  font-weight: 550;
+}
+.import-heading p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.7;
+}
+.import-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0 0 48px;
+}
+.import-actions button {
+  min-height: 32px;
+  font-size: 11px;
+}
+.import-selection {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 16px;
+}
+.import-selection ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  max-height: 148px;
+  overflow: auto;
+}
+.import-selection li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11px;
+  min-height: 32px;
+}
+.import-selection li > span:not(.icon) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-selection li > .icon {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+  color: var(--muted);
+}
+.import-selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.import-selection-actions > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+.import-selection-actions button {
+  min-height: 32px;
+  font-size: 11px;
+}
+.import-error,
+.import-result {
+  font-size: 11px;
+  line-height: 1.8;
+  margin: 12px 0 0;
+  overflow-wrap: anywhere;
+}
+.import-error {
+  color: #d87771;
+}
+.import-result {
+  color: var(--primary);
+}
 .mod-section-switch {
   display: flex;
   gap: 5px;
