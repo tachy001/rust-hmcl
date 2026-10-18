@@ -67,6 +67,7 @@ export interface Runtime {
   vendor: string;
   architecture: string;
   is_jdk: boolean;
+  compatible: boolean;
 }
 export interface Mod {
   name: string;
@@ -116,6 +117,9 @@ export type Job =
   | { kind: 'rename'; id: string; name: string }
   | { kind: 'duplicate'; id: string; name: string; copy_saves: boolean };
 export const api = {
+  pickJava: () => invoke<string | null>('pick_java'),
+  registerJava: (path: string) =>
+    invoke<{ runtime: Runtime; snapshot: Snapshot }>('register_java', { path }),
   pickModpack: () => invoke<string | null>('pick_modpack'),
   inspectModpack: (path: string) => invoke<ModpackPreview>('inspect_modpack', { path }),
   pickImport: (content: 'mods' | 'resources', folder = false) =>

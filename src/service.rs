@@ -102,6 +102,11 @@ pub struct ModEnvironment {
     pub game: String,
     pub loader: String,
 }
+#[derive(Serialize)]
+pub struct RegisteredJava {
+    pub runtime: java_runtime::Runtime,
+    pub snapshot: Snapshot,
+}
 #[derive(Clone)]
 pub struct Service {
     config: Arc<Mutex<Config>>,
@@ -205,6 +210,46 @@ impl Service {
             &config.hidden_java,
             &AtomicBool::new(false),
         )
+    }
+    pub fn register_java(&self, path: &str) -> Result<RegisteredJava> {
+        let task = self
+            .task
+            .lock()
+            .map_err(|_| anyhow::anyhow!("任务状态不可用"))?;
+        if task.running {
+            bail!("请等待当前任务结束后再添加 Java");
+        }
+        let runtime = java_runtime::probe_selected(path)?;
+        if !runtime.compatible {
+            bail!(
+                "Java 架构 {} 不适配当前启动器，请选择匹配的运行环境",
+                runtime.architecture
+            );
+        }
+        let mut config = self.config()?;
+        let path = runtime
+            .path
+            .to_str()
+            .context("Java 路径不是有效文本")?
+            .to_owned();
+        if !java_runtime::is_hidden(&runtime.path, &config.java_paths) {
+            config.java_paths.push(path);
+        }
+        config
+            .hidden_java
+            .retain(|path| !java_runtime::is_hidden(&runtime.path, std::slice::from_ref(path)));
+        config.normalize();
+        config.validate()?;
+        config.save()?;
+        *self
+            .config
+            .lock()
+            .map_err(|_| anyhow::anyhow!("配置状态不可用"))? = config;
+        drop(task);
+        Ok(RegisteredJava {
+            runtime,
+            snapshot: self.snapshot()?,
+        })
     }
     pub fn mod_files(&self) -> Result<Vec<mods::ModFile>> {
         mods::list(&mods::directory(&self.config()?)?)
@@ -439,7 +484,15 @@ impl Service {
                     let metadata = crate::metadata::resolve(root, &id)?;
                     worker.prepare(root, &id, &metadata)?;
                 }
-                Job::Java { major } => worker.download_java(major)?,
+                Job::Java { major } => {
+                    let path = worker.install_java(major)?;
+                    if !java_runtime::is_hidden(&path, &config.java_paths) {
+                        config.java_paths.push(path.to_string_lossy().into_owned());
+                    }
+                    config.hidden_java.retain(|value| {
+                        !java_runtime::is_hidden(&path, std::slice::from_ref(value))
+                    });
+                }
                 Job::Fabric { id } => {
                     config.selected =
                         worker.install_loader(root, &id, Loader::Fabric, None, None)?;
@@ -500,6 +553,20 @@ impl Service {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failed_java_registration_does_not_mutate_configuration() {
+        let service = Service::new(Config::default());
+        let before = serde_json::to_value(service.snapshot().unwrap().config).unwrap();
+        assert!(service.register_java("relative/java").is_err());
+        let path = std::env::temp_dir().join("not-a-java-program.txt");
+        assert!(service.register_java(path.to_str().unwrap()).is_err());
+        assert_eq!(
+            serde_json::to_value(service.snapshot().unwrap().config).unwrap(),
+            before
+        );
+        service.task.lock().unwrap().running = true;
+        assert!(service.register_java("java").is_err());
+    }
     #[test]
     fn mod_discovery_is_scoped_to_explicit_instance_and_rejects_before_network() {
         let root = std::env::temp_dir().join(format!("aster-mod-service-{}", std::process::id()));

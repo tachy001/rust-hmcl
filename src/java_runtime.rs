@@ -17,6 +17,7 @@ pub struct Runtime {
     pub vendor: String,
     pub architecture: String,
     pub is_jdk: bool,
+    pub compatible: bool,
 }
 pub fn executable() -> &'static str {
     if cfg!(windows) {
@@ -106,7 +107,12 @@ pub fn is_hidden(path: &Path, hidden: &[String]) -> bool {
     let display = path.to_string_lossy();
     hidden.iter().any(|value| {
         if cfg!(windows) {
-            value.eq_ignore_ascii_case(&display)
+            let value = crate::game::java_compatible_path(PathBuf::from(value));
+            let normalized = crate::game::java_compatible_path(path.to_path_buf());
+            value
+                .to_string_lossy()
+                .replace('/', "\\")
+                .eq_ignore_ascii_case(&normalized.to_string_lossy().replace('/', "\\"))
         } else {
             value == display.as_ref()
         }
@@ -156,15 +162,18 @@ pub fn probe(path: &Path) -> Result<Runtime> {
     let mut child = command.spawn().context("无法运行所选 Java")?;
     let stdout = child.stdout.take().context("无法读取 Java 输出")?;
     let stderr = child.stderr.take().context("无法读取 Java 版本")?;
+    let (output_tx, output_rx) = std::sync::mpsc::channel();
     let read = |stream: Box<dyn Read + Send>| {
+        let output_tx = output_tx.clone();
         std::thread::spawn(move || {
             let mut bytes = vec![];
             let _ = stream.take(128 * 1024).read_to_end(&mut bytes);
-            bytes
+            let _ = output_tx.send(bytes);
         })
     };
-    let stdout = read(Box::new(stdout));
-    let stderr = read(Box::new(stderr));
+    let _stdout = read(Box::new(stdout));
+    let _stderr = read(Box::new(stderr));
+    drop(output_tx);
     let started = Instant::now();
     let status = loop {
         if let Some(status) = child.try_wait()? {
@@ -180,12 +189,41 @@ pub fn probe(path: &Path) -> Result<Runtime> {
     if !status.success() {
         bail!("Java 检测失败");
     }
-    let bytes = [
-        stdout.join().unwrap_or_default(),
-        stderr.join().unwrap_or_default(),
-    ]
-    .concat();
+    let mut bytes = vec![];
+    for _ in 0..2 {
+        let remaining = Duration::from_secs(5).saturating_sub(started.elapsed());
+        bytes.extend(
+            output_rx
+                .recv_timeout(remaining)
+                .context("Java 输出读取超时")?,
+        );
+    }
     parse(path, &String::from_utf8_lossy(&bytes))
+}
+pub fn probe_selected(path: &str) -> Result<Runtime> {
+    let path = Path::new(path.trim());
+    if !path.is_absolute() {
+        bail!("请选择 Java 可执行文件的完整路径");
+    }
+    let mut path = path.to_path_buf();
+    if cfg!(windows)
+        && path
+            .file_name()
+            .is_some_and(|name| name.eq_ignore_ascii_case("javaw.exe"))
+    {
+        path.set_file_name("java.exe");
+    }
+    if !path
+        .file_name()
+        .is_some_and(|name| name.eq_ignore_ascii_case(executable()))
+    {
+        bail!("请选择 bin 目录中的 Java 可执行文件");
+    }
+    let path = crate::game::java_compatible_path(path.canonicalize().context("Java 路径不存在")?);
+    if !path.is_file() {
+        bail!("Java 路径不是可执行文件");
+    }
+    probe(&path)
 }
 
 fn parse(path: &Path, text: &str) -> Result<Runtime> {
@@ -214,7 +252,9 @@ fn parse(path: &Path, text: &str) -> Result<Runtime> {
         .and_then(|candidate| candidate.canonicalize().ok())
         .map(crate::game::java_compatible_path)
         .unwrap_or_else(|| path.into());
+    let architecture = property("os.arch").unwrap_or_else(|| "未知架构".into());
     Ok(Runtime {
+        compatible: matches_architecture(&architecture),
         is_jdk: path.parent().is_some_and(|directory| {
             directory
                 .join(if cfg!(windows) { "javac.exe" } else { "javac" })
@@ -224,13 +264,63 @@ fn parse(path: &Path, text: &str) -> Result<Runtime> {
         major,
         version,
         vendor: property("java.vendor").unwrap_or_else(|| "Java".into()),
-        architecture: property("os.arch").unwrap_or_else(|| "未知架构".into()),
+        architecture,
     })
 }
 
+pub fn matches_architecture(value: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    match crate::game::arch() {
+        "x86_64" => ["amd64", "x86_64", "x64"].contains(&value.as_str()),
+        "aarch64" => ["aarch64", "arm64"].contains(&value.as_str()),
+        "x86" => ["x86", "i386", "i486", "i586", "i686"].contains(&value.as_str()),
+        _ => false,
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn manual_selection_rejects_other_programs_without_execution() {
+        assert!(probe_selected("java").is_err());
+        let path = std::env::temp_dir().join("aster-not-java.txt");
+        assert!(probe_selected(path.to_str().unwrap()).is_err());
+    }
+    #[test]
+    fn automatic_selection_only_accepts_matching_architecture_aliases() {
+        assert!(matches_architecture(crate::game::arch()));
+        assert!(!matches_architecture("unknown"));
+        if cfg!(target_arch = "x86_64") {
+            assert!(matches_architecture("amd64"));
+            assert!(!matches_architecture("x86"));
+            assert!(!matches_architecture("aarch64"));
+        }
+        if cfg!(target_arch = "aarch64") {
+            assert!(matches_architecture("arm64"));
+            assert!(!matches_architecture("amd64"));
+        }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn inherited_output_handles_do_not_make_a_probe_wait_forever() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("aster-java-output-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let pid_path = root.join("child.pid");
+        let quoted = pid_path.to_string_lossy().replace('\'', "'\\''");
+        let script = root.join("java");
+        std::fs::write(&script, format!("#!/bin/sh\nsleep 30 &\nprintf '%s' \"$!\" > '{quoted}'\necho 'java.version = 17'\nexit 0\n")).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let start = Instant::now();
+        let result = probe(&script);
+        let elapsed = start.elapsed();
+        let child: u32 = std::fs::read_to_string(&pid_path).unwrap().parse().unwrap();
+        assert!(child > 1);
+        let _ = Command::new("/bin/kill").arg(child.to_string()).status();
+        std::fs::remove_dir_all(root).unwrap();
+        assert!(result.is_err());
+        assert!(elapsed < Duration::from_secs(10));
+    }
     #[test]
     fn recognizes_legacy_current_and_early_access_java() {
         let old = parse(

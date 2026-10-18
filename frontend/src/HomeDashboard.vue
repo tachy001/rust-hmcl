@@ -37,6 +37,36 @@ const memory = computed(() => {
 const actions = ref<HTMLElement | null>(null);
 const picker = ref<HTMLElement | null>(null);
 const pickerTrigger = ref<HTMLButtonElement | null>(null);
+const chart = ref<HTMLElement | null>(null);
+const resting = ref(document.hidden);
+let parallaxFrame = 0;
+function resetChart() {
+  cancelAnimationFrame(parallaxFrame);
+  chart.value?.style.removeProperty('--chart-x');
+  chart.value?.style.removeProperty('--chart-y');
+}
+function moveChart(event: PointerEvent) {
+  if (
+    event.pointerType === 'touch' ||
+    props.data?.config.reduce_motion ||
+    matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+    return;
+  const bounds = chart.value?.getBoundingClientRect();
+  if (!bounds) return;
+  const x = ((event.clientX - bounds.left) / bounds.width - 0.5) * 14;
+  const y = ((event.clientY - bounds.top) / bounds.height - 0.5) * 10;
+  cancelAnimationFrame(parallaxFrame);
+  parallaxFrame = requestAnimationFrame(() => {
+    chart.value?.style.setProperty('--chart-x', `${x}px`);
+    chart.value?.style.setProperty('--chart-y', `${y}px`);
+  });
+}
+function visibilityChanged() {
+  resting.value = document.hidden;
+  if (resting.value) resetChart();
+}
+watch(() => props.data?.config.reduce_motion, resetChart);
 watch(
   () => props.menu,
   async (open) => {
@@ -71,14 +101,21 @@ function closeOutside(event: PointerEvent) {
   if (props.menu && event.target instanceof Node && !actions.value?.contains(event.target))
     emit('toggleMenu');
 }
-onMounted(() => document.addEventListener('pointerdown', closeOutside));
-onUnmounted(() => document.removeEventListener('pointerdown', closeOutside));
+onMounted(() => {
+  document.addEventListener('pointerdown', closeOutside);
+  document.addEventListener('visibilitychange', visibilityChanged);
+});
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', closeOutside);
+  document.removeEventListener('visibilitychange', visibilityChanged);
+  cancelAnimationFrame(parallaxFrame);
+});
 </script>
 <template>
-  <div class="dashboard">
+  <div class="dashboard" :class="{ 'chart-resting': resting }">
     <div class="dashboard-heading">
       <div>
-        <p class="eyebrow">你的 MINECRAFT 工作台</p>
+        <p class="eyebrow">ASTER / 你的世界星图</p>
         <h1>欢迎回来，{{ data?.config.player ?? '冒险家' }}<span class="greeting-dot">。</span></h1>
       </div>
       <span class="quiet-pill"
@@ -86,11 +123,31 @@ onUnmounted(() => document.removeEventListener('pointerdown', closeOutside));
         >{{ task.running ? '旅程进行中' : '新的世界，在等你' }}</span
       >
     </div>
-    <section class="dashboard-hero">
-      <div class="hero-art"><WorldScene /></div>
+    <section
+      ref="chart"
+      class="dashboard-hero star-chart"
+      :class="{ 'journey-active': task.running }"
+      @pointermove="moveChart"
+      @pointerleave="resetChart"
+    >
+      <div class="hero-art">
+        <div class="chart-grid"></div>
+        <div class="chart-aurora"></div>
+        <WorldScene />
+      </div>
+      <nav class="chart-destinations" aria-label="星图快捷入口">
+        <button class="chart-destination destination-library" @click="emit('navigate', 'versions')">
+          <span class="destination-beacon"><Icon name="deployed_code" /></span>
+          <span><small>01 / 我的坐标</small><b>游戏库</b></span>
+        </button>
+        <button class="chart-destination destination-new" @click="emit('navigate', 'download')">
+          <span class="destination-beacon"><Icon name="add" /></span>
+          <span><small>02 / 探索未知</small><b>发现新世界</b></span>
+        </button>
+      </nav>
       <div class="hero-copy">
         <span class="hero-kicker"><span class="tiny-star">✦</span> 你的下一段旅程</span>
-        <h2>留一片天地，<br />给你的想象。</h2>
+        <h2>下一站，<br /><span class="hero-title-world">你的世界。</span></h2>
         <p>
           {{
             current
@@ -164,7 +221,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', closeOutside));
           <span class="hero-version">{{ current?.subtitle ?? 'Minecraft Java 版' }}</span>
         </div>
       </div>
-      <div class="scene-caption"><span class="caption-line"></span> BEYOND THE EVERYDAY</div>
+      <div class="scene-caption"><span class="caption-line"></span> WORLD ATLAS / 星屿</div>
     </section>
     <div class="dashboard-bottom">
       <section class="home-library">
@@ -178,8 +235,9 @@ onUnmounted(() => document.removeEventListener('pointerdown', closeOutside));
         </div>
         <div v-if="featured.length" class="home-game-grid">
           <article
-            v-for="instance in featured"
+            v-for="(instance, index) in featured"
             :key="instance.id"
+            :style="{ '--card-order': index }"
             class="home-game-card"
             :class="{ 'is-current': instance.id === current?.id }"
           >

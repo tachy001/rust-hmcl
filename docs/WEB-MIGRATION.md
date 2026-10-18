@@ -4,6 +4,16 @@
 当前使用 Rust + Tauri 2 + Vue 3 / TypeScript / CSS，迁移完成前保留
 egui 入口作为功能回归参照。不能把界面更新或一次构建成功视为全部功能验收。
 
+2026-10-18：世界星图新增轨道流光、分层视差、坐标快捷入口及操作动效。
+已通过真实 Service 的 Web 验证（包含轨道时间采样、视差复位、快捷导航和减少动画），
+以及 Windows 发布程序的 17 项隐藏 WebView2 检查。54 项核心测试通过，4 项联网测试跳过。
+本次 Windows 发布使用 Tauri CLI 嵌入资源；普通 Cargo 发布构建不能代替这一打包步骤。
+
+Java 管理提供手动路径注册、全局默认及隐藏／恢复，下载校验后暂存提交，
+过滤架构不匹配环境。独立的 `node scripts/test-java-online.mjs` 会主动联网并读取 Java 版本；
+它与常规不执行 Java 的 UI 测试分开运行。当前真实 Temurin 17 JRE 登记与重复安装复用验证通过，
+未启动 Minecraft，结果在 `dist/java-online-proof.json`；这不替代各平台真实游戏启动验收。
+
 ## 结构
 
 - `src/lib.rs`：共用 Rust 核心；`--no-default-features` 不依赖 egui。

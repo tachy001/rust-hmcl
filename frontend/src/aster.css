@@ -640,6 +640,326 @@ select:focus {
     opacity: 1;
   }
 }
+/* The atlas has three depth planes: paper grid, drifting world, live destinations. */
+.star-chart {
+  isolation: isolate;
+  background: linear-gradient(115deg, #123d38, #102e38 62%, #1c283d);
+}
+.chart-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  background-image: radial-gradient(#9bdbc5 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: linear-gradient(90deg, transparent 25%, #000);
+  transform: translate(calc(var(--chart-x, 0px) * -0.3), calc(var(--chart-y, 0px) * -0.3));
+  transition: transform 0.8s ease-out;
+}
+.chart-aurora {
+  position: absolute;
+  width: 60%;
+  height: 130%;
+  right: -10%;
+  top: -35%;
+  background: radial-gradient(ellipse, #89a6ff19, transparent 65%);
+  animation: atlas-aurora 14s ease-in-out infinite alternate;
+}
+.star-chart .world-scene {
+  transform: translate(var(--chart-x, 0px), var(--chart-y, 0px));
+  transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hero-title-world {
+  color: #cceeb7;
+  position: relative;
+}
+.hero-title-world::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 12%;
+  bottom: -6px;
+  height: 1px;
+  background: linear-gradient(90deg, #cceeb780, transparent);
+  transform-origin: left;
+  animation: atlas-line 0.85s 0.2s both;
+}
+.chart-destinations {
+  position: absolute;
+  inset: 0 0 0 48%;
+  z-index: 3;
+  pointer-events: none;
+}
+.chart-destination {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e1f4e9;
+  border: 1px solid #9de4cf30;
+  border-radius: 30px;
+  padding: 6px 12px 6px 6px;
+  background: #102d35ed;
+  box-shadow: 0 6px 24px #071b2929;
+  pointer-events: auto;
+  text-align: left;
+  transition:
+    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 0.3s,
+    background 0.3s;
+  animation: atlas-arrive 0.6s 0.3s backwards;
+}
+.destination-library {
+  top: 20px;
+  right: 26px;
+}
+.destination-new {
+  bottom: 46px;
+  right: 18px;
+  animation-delay: 0.45s;
+}
+.chart-destination small {
+  display: block;
+  color: #94b6ad;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+}
+.chart-destination b {
+  display: block;
+  font-size: 11px;
+  font-weight: 550;
+}
+.destination-beacon {
+  display: grid;
+  place-items: center;
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #92dcb552;
+  border-radius: 50%;
+  color: #caecb7;
+  background: #8ad8b80c;
+}
+.destination-beacon .icon {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+}
+.destination-beacon::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 1px solid #92dcb5;
+  border-radius: inherit;
+  animation: atlas-beacon 4s ease-out infinite;
+}
+.destination-new .destination-beacon::after {
+  animation-delay: 2s;
+}
+.chart-destination:hover {
+  transform: translateY(-3px);
+  border-color: #a6e9c58a;
+  background: #204947;
+}
+.chart-destination:active {
+  transform: translateY(0) scale(0.97);
+}
+.chart-destination:focus-visible {
+  outline: 2px solid #cceeb7;
+  outline-offset: 4px;
+}
+.scene-route path {
+  animation: atlas-route 12s linear infinite;
+}
+.scene-route path:nth-child(2) {
+  animation-duration: 18s;
+  animation-direction: reverse;
+}
+.portal-light {
+  animation: atlas-portal 4s ease-in-out infinite;
+}
+.journey-active .portal-light {
+  animation-duration: 1.2s;
+}
+.journey-active .scene-route path {
+  animation-duration: 3s;
+}
+.star-chart .launch-split {
+  transition:
+    box-shadow 0.35s,
+    transform 0.2s;
+}
+.star-chart .launch-split:has(.launch-primary:enabled:hover) {
+  box-shadow:
+    0 6px 30px #7cddb43d,
+    0 0 0 3px #a7e8cb12;
+  transform: translateY(-2px);
+}
+.star-chart .launch-split:has(.launch-primary:enabled:active) {
+  transform: translateY(0) scale(0.98);
+}
+.star-chart .launch-primary:enabled:hover > .icon {
+  animation: atlas-rocket 0.65s ease-in-out;
+}
+.dashboard-heading {
+  animation: atlas-arrive 0.5s both;
+}
+.hero-copy > .hero-kicker {
+  animation: atlas-arrive 0.6s 0.05s both;
+}
+.hero-copy > h2 {
+  animation: atlas-arrive 0.7s 0.1s both;
+}
+.hero-copy > p {
+  animation: atlas-arrive 0.7s 0.15s both;
+}
+.home-game-card {
+  animation: atlas-arrive 0.6s backwards;
+  animation-delay: calc(var(--card-order, 0) * 75ms + 150ms);
+}
+.home-game-card .game-cover {
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.home-game-card:hover .game-cover {
+  transform: translateY(-3px) rotate(-5deg);
+}
+.card-launch .icon,
+.brief-link > .icon {
+  transition: transform 0.25s;
+}
+.card-launch:hover .icon,
+.brief-link:hover > .icon {
+  transform: translateX(3px);
+}
+.favorite-button.is-favorite svg {
+  animation: atlas-favorite 0.45s ease-out;
+}
+.java-runtime p.java-arch-warning {
+  color: #d87771;
+}
+.java-manager .spinning {
+  animation: atlas-spin 0.9s linear infinite;
+}
+.chart-resting *,
+.chart-resting *::before,
+.chart-resting *::after {
+  animation-play-state: paused !important;
+}
+@keyframes atlas-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes atlas-line {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes atlas-beacon {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.4;
+  }
+  65%,
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+@keyframes atlas-route {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+@keyframes atlas-portal {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+@keyframes atlas-aurora {
+  from {
+    transform: translate(-6%, 2%) rotate(-12deg);
+    opacity: 0.45;
+  }
+  to {
+    transform: translate(8%, 8%) rotate(12deg);
+    opacity: 1;
+  }
+}
+@keyframes atlas-rocket {
+  30% {
+    transform: translate(-2px, 2px);
+  }
+  65% {
+    transform: translate(3px, -3px);
+  }
+}
+@keyframes atlas-favorite {
+  40% {
+    transform: scale(1.35) rotate(12deg);
+  }
+}
+@keyframes atlas-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+/* Stop ambient timelines completely, including pseudo-elements, when motion is reduced. */
+.reduced .dashboard *,
+.reduced .dashboard *::before,
+.reduced .dashboard *::after {
+  animation: none !important;
+}
+.reduced .star-chart .world-scene,
+.reduced .chart-grid {
+  transform: none;
+}
+.reduced .destination-beacon::after {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard *,
+  .dashboard *::before,
+  .dashboard *::after {
+    animation: none !important;
+  }
+  .star-chart .world-scene,
+  .chart-grid {
+    transform: none;
+  }
+  .destination-beacon::after {
+    opacity: 0;
+  }
+}
+@media (max-width: 950px) {
+  .destination-library {
+    right: 12px;
+    top: 14px;
+  }
+  .destination-new {
+    right: 12px;
+    bottom: 36px;
+  }
+  .chart-destination {
+    gap: 5px;
+    padding-right: 9px;
+  }
+  .chart-destination small {
+    display: none;
+  }
+}
 .dashboard-bottom {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 220px;
@@ -922,6 +1242,318 @@ select:focus {
 }
 .pack-installer .toolbar h1 {
   margin: 0;
+}
+.java-manager .toolbar h1 {
+  margin: 0;
+}
+.java-auto-card {
+  display: flex;
+  width: 100%;
+  gap: 15px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+  text-align: left;
+  margin-bottom: 18px;
+}
+.java-auto-card.selected {
+  background: var(--selected);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--line));
+}
+.java-auto-icon {
+  display: grid;
+  place-content: center;
+  flex: 0 0 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--field);
+  color: var(--primary);
+}
+.java-auto-card > span:nth-child(2) {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+.java-auto-card b {
+  font-size: 13px;
+  font-weight: 550;
+}
+.java-auto-card small {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.java-auto-card > .icon {
+  color: var(--primary);
+}
+.java-current-path {
+  display: flex;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  padding: 0 4px 12px;
+  overflow-wrap: anywhere;
+}
+.java-current-path > span {
+  white-space: nowrap;
+}
+.java-current-path code {
+  min-width: 0;
+}
+.java-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: #d87771;
+  padding: 16px;
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.java-add-card {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  padding: 20px;
+  background: var(--surface);
+  margin-bottom: 24px;
+}
+.java-label {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.java-path-label {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 11px;
+}
+.java-path-label input {
+  width: 100%;
+}
+.java-add-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.java-add-actions > span {
+  margin-right: auto;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.java-add-actions button {
+  min-height: 34px;
+  font-size: 11px;
+}
+.java-list-heading h2 span {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.java-runtime {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 17px;
+  margin-bottom: 10px;
+  background: var(--surface);
+}
+.java-runtime.selected {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--line));
+}
+.java-runtime-icon {
+  display: grid;
+  place-content: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--primary);
+}
+.java-runtime-copy {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.java-runtime h3 {
+  font-size: 12px;
+  font-weight: 550;
+  margin: 0 0 6px;
+  line-height: 1.7;
+}
+.java-runtime p {
+  font-size: 10px;
+  color: var(--muted);
+  margin: 0 0 5px;
+}
+.java-runtime code {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.7;
+}
+.java-selected-label {
+  margin-left: 8px;
+  border-radius: 20px;
+  padding: 3px 6px;
+  font-size: 9px;
+  color: var(--primary);
+  background: var(--selected);
+  white-space: nowrap;
+}
+.java-runtime-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.java-runtime-actions button {
+  font-size: 10px;
+  min-height: 30px;
+}
+.java-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  padding: 26px;
+  min-height: 170px;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+.java-empty > .icon {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+  opacity: 0.7;
+}
+.java-empty h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.java-empty p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.7;
+  text-align: center;
+}
+.java-hidden {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  margin: 18px 0;
+  overflow: hidden;
+}
+.java-hidden-toggle {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  padding: 12px;
+  border-radius: 0;
+  background: transparent;
+}
+.java-hidden > div {
+  padding: 0 15px 15px;
+}
+.java-hidden p {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.java-hidden-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+}
+.java-hidden-row code {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.java-hidden-row button {
+  font-size: 10px;
+  min-height: 30px;
+}
+.java-download {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: linear-gradient(120deg, var(--selected), var(--surface));
+  border: 1px solid var(--line);
+  padding: 22px;
+  border-radius: 13px;
+  margin-top: 22px;
+}
+.java-download-copy {
+  min-width: 0;
+  flex: 1;
+}
+.java-download h2 {
+  font-size: 18px;
+  margin: 7px 0;
+}
+.java-download p {
+  margin: 10px 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.8;
+}
+.java-download .switch-row {
+  gap: 10px;
+  font-size: 11px;
+}
+.java-download-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 180px;
+  flex-shrink: 0;
+}
+.java-download-actions label {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.java-download-actions select {
+  width: 100%;
+}
+@media (max-width: 950px) {
+  .java-add-actions > span {
+    width: 100%;
+    margin-bottom: 5px;
+  }
+  .java-download {
+    gap: 14px;
+    padding: 18px;
+  }
+  .java-download-actions {
+    width: 150px;
+  }
 }
 .pack-drop-zone {
   display: flex;

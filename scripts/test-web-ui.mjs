@@ -212,6 +212,59 @@ try {
       ),
     );
   await settle();
+  const atlasMotion = await page
+    .locator('.scene-route path')
+    .first()
+    .evaluate((element) => {
+      const animation = element.getAnimations()[0];
+      if (!animation) throw new Error('Atlas route has no animation');
+      animation.pause();
+      animation.currentTime = 0;
+      const start = getComputedStyle(element).strokeDashoffset;
+      animation.currentTime = 6000;
+      const middle = getComputedStyle(element).strokeDashoffset;
+      animation.play();
+      return { start, middle };
+    });
+  assert.notEqual(atlasMotion.start, atlasMotion.middle);
+  await page.locator('.star-chart').dispatchEvent('pointermove', {
+    pointerType: 'mouse',
+    clientX: 700,
+    clientY: 160,
+  });
+  await expect
+    .poll(() =>
+      page
+        .locator('.star-chart')
+        .evaluate((element) => element.style.getPropertyValue('--chart-x')),
+    )
+    .not.toBe('');
+  await page.locator('.star-chart').dispatchEvent('pointerleave');
+  await expect(page.locator('.star-chart')).not.toHaveAttribute('style', /--chart-x/);
+  await page.locator('.destination-library').click();
+  await expect(page.getByRole('button', { name: '1.20.1更多操作', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '返回首页', exact: true }).click();
+  await settle();
+  await page.locator('.destination-new').click();
+  await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
+  await expect(page.locator('.star-chart')).toHaveCount(0);
+  await page.getByRole('button', { name: '返回首页', exact: true }).click();
+  await settle();
+  const beforeJava = await rpc('snapshot');
+  await page.getByRole('button', { name: 'Java 管理', exact: true }).click();
+  await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
+  await expect(
+    page.getByRole('textbox', { name: 'Java 可执行文件路径', exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole('textbox', { name: 'Java 可执行文件路径', exact: true })
+    .fill('relative/not-java');
+  await page.getByRole('button', { name: '添加并检测', exact: true }).click();
+  await expect(page.locator('.java-error')).toBeVisible();
+  assert.deepEqual((await rpc('snapshot')).config, beforeJava.config);
+  await page.screenshot({ path: join(output, 'java-manager.png') });
+  await page.getByRole('button', { name: '返回首页', exact: true }).click();
+  await settle();
   await page.screenshot({ path: join(output, 'home-light.png') });
   assert.equal(
     await page
@@ -495,6 +548,18 @@ try {
   await page.getByRole('checkbox', { name: '减少动画和动态效果', exact: true }).check();
   await page.getByRole('button', { name: '保存设置', exact: true }).click();
   await expect(page.locator('.launcher')).toHaveClass(/reduced/);
+  await page.getByRole('button', { name: '返回首页', exact: true }).click();
+  await expect(page.locator('.scene-route path').first()).toHaveCSS('animation-name', 'none');
+  await expect(page.locator('.chart-aurora')).toHaveCSS('animation-name', 'none');
+  assert.equal(
+    await page
+      .locator('.destination-beacon')
+      .first()
+      .evaluate((element) => getComputedStyle(element, '::after').animationName),
+    'none',
+  );
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
   assert.equal(
     await isolationSwitch.evaluate(
       (element) => getComputedStyle(element, '::before').transitionDuration,
@@ -785,6 +850,8 @@ try {
           'snapshot',
           'Aster home favorites persist and library filter updates after unpinning',
           'original island scene uses transform animation',
+          'Java manager rejects invalid manual paths without changing configuration',
+          'atlas route advances, parallax resets, destinations navigate and reduced motion stops ambient effects',
           'Aster version picker keyboard navigation and focus restoration',
           'window corners become square when maximized or fullscreen and restore on resize',
           'invalid settings do not change stored configuration',

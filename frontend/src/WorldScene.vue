@@ -45,6 +45,10 @@
           stroke-dasharray="2 8"
         />
       </g>
+      <g class="scene-route" stroke="#a5e8d2" stroke-width="1.5" stroke-linecap="round">
+        <path d="M110 246C165 315 422 271 496 166" pathLength="100" stroke-dasharray="5 95" />
+        <path d="M150 156C215 88 430 109 474 230" pathLength="100" stroke-dasharray="3 97" />
+      </g>
       <circle cx="425" cy="75" r="34" fill="#d1e9b3" opacity=".8" />
       <circle cx="437" cy="65" r="30" fill="#102a34" />
       <g class="scene-stars" fill="#b0e2d8">
@@ -77,6 +81,7 @@
         <path d="m261 224 15-5 60 23-18 10Z" fill="#d8e6ae" opacity=".7" />
         <path d="m276 219-9-18 8-22 20-13 17 4-21 16-8 17 10 23" fill="#b8d6aa" opacity=".55" />
         <g class="scene-portal">
+          <path class="portal-light" d="m334 135 12-7 14 8v62l-12 7-15-11Z" fill="#d6ffc3" />
           <path d="m320 202 1-75 24-14 27 15v75l-11 6v-75l-16-9-14 8v75Z" fill="#234b49" />
           <path d="m333 194 1-59 12-7 14 8v62l-12 7Z" fill="url(#portal-glow)" opacity=".8" />
           <path d="m321 127 24-14 27 15-12 8-14-8-12 7Z" fill="#5a8e78" />

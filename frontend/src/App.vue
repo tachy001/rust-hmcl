@@ -9,6 +9,7 @@ import FavoriteToggle from './FavoriteToggle.vue';
 import ModLibrary from './ModLibrary.vue';
 import LocalImport from './LocalImport.vue';
 import PackInstaller from './PackInstaller.vue';
+import JavaManager from './JavaManager.vue';
 import InstanceSettings from './InstanceSettings.vue';
 import {
   api,
@@ -17,7 +18,6 @@ import {
   type Job,
   type Mod,
   type Pack,
-  type Runtime,
   type Snapshot,
   type Task,
   type Version,
@@ -53,14 +53,12 @@ const task = ref<Task>({
   logs: [],
 });
 const releases = ref<Version[]>([]),
-  runtimes = ref<Runtime[]>([]),
   mods = ref<Mod[]>([]),
   packs = ref<Pack[]>([]);
 const query = ref(''),
   favoritesOnly = ref(false),
   snapshots = ref(false),
-  username = ref(''),
-  javaMajor = ref(21);
+  username = ref('');
 interface InstancePrompt {
   kind: 'duplicate' | 'rename';
   id: string;
@@ -136,6 +134,10 @@ const tabs = [
 ] as const;
 function fail(cause: unknown) {
   error.value = String(cause);
+}
+function applySnapshot(value: Snapshot) {
+  data.value = value;
+  draft.value = structuredClone(toRaw(value.config));
 }
 async function refresh() {
   try {
@@ -243,7 +245,6 @@ async function loadPage() {
   loading.value = true;
   try {
     if (page.value === 'download' && !releases.value.length) releases.value = await api.versions();
-    if (page.value === 'java') runtimes.value = await api.runtimes();
     if (page.value === 'instance' && tab.value === 'mods') mods.value = await api.mods();
     if (page.value === 'instance' && tab.value === 'resources') packs.value = await api.packs();
   } catch (cause) {
@@ -404,9 +405,7 @@ async function account() {
     accountError.value = '';
   }
 }
-async function chooseJava(runtime: Runtime) {
-  if (data.value) await save({ ...data.value.config, java: runtime.path });
-}
+
 async function toggleMod(name: string) {
   try {
     mods.value = await api.toggleMod(name);
@@ -813,46 +812,14 @@ onUnmounted(() => {
               :submit="start"
               @library="go('versions')"
             />
-            <template v-else-if="page === 'java'">
-              <div class="toolbar">
-                <h1>Java 管理</h1>
-                <button :disabled="loading" @click="loadPage">
-                  <Icon name="refresh" />重新检测
-                </button>
-              </div>
-              <p class="subtitle">启动器无需 Java；启动 Minecraft 时使用下列运行环境。</p>
-              <div class="list">
-                <button
-                  v-for="runtime in runtimes"
-                  :key="runtime.path"
-                  class="list-row"
-                  :class="{ active: data?.config.java === runtime.path }"
-                  :disabled="task.running"
-                  @click="chooseJava(runtime)"
-                >
-                  <Icon name="deployed_code" /><span
-                    ><b>Java {{ runtime.major }} · {{ runtime.vendor }}</b
-                    ><small>{{ runtime.version }} · {{ runtime.architecture }}</small
-                    ><small>{{ runtime.path }}</small></span
-                  ><Icon v-if="data?.config.java === runtime.path" name="check" />
-                </button>
-              </div>
-              <div class="panel compact">
-                <h2>下载 Java</h2>
-                <div class="inline">
-                  <select v-model="javaMajor" aria-label="Java 版本">
-                    <option v-for="major in [8, 11, 17, 21, 25]" :value="major">
-                      Java {{ major }}
-                    </option></select
-                  ><button
-                    :disabled="task.running"
-                    @click="start({ kind: 'java', major: javaMajor })"
-                  >
-                    <Icon name="download" />下载 Temurin
-                  </button>
-                </div>
-              </div>
-            </template>
+            <JavaManager
+              v-else-if="page === 'java' && data"
+              :config="data.config"
+              :task="task"
+              :save="save"
+              :submit="start"
+              @snapshot="applySnapshot"
+            />
             <template v-else-if="page === 'settings' && draft">
               <h1>启动器设置</h1>
               <form

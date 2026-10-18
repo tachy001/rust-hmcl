@@ -4,6 +4,22 @@ use anyhow::Context;
 use anyhow::Result;
 use std::{fs, path::Path};
 
+pub(crate) fn remove_owned_directory(path: &Path, parent: &Path) -> Result<()> {
+    let attributes = fs::symlink_metadata(path)?;
+    anyhow::ensure!(
+        attributes.is_dir() && !attributes.file_type().is_symlink(),
+        "暂存路径不是普通目录"
+    );
+    let parent = fs::canonicalize(parent)?;
+    let resolved = fs::canonicalize(path)?;
+    anyhow::ensure!(
+        resolved.parent() == Some(parent.as_path()) && resolved.file_name() == path.file_name(),
+        "暂存目录超出指定范围"
+    );
+    fs::remove_dir_all(resolved)?;
+    Ok(())
+}
+
 pub(crate) fn commit_new(source: &Path, destination: &Path) -> Result<()> {
     #[cfg(target_os = "windows")]
     {

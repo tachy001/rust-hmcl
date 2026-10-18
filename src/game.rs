@@ -437,7 +437,6 @@ impl Worker {
             java_compatible_path(fs::canonicalize(&config.game_dir).context("游戏目录不存在")?);
         let dir = version_dir(&root, &config.selected)?;
         let meta = crate::metadata::resolve(&root, &config.selected)?;
-        self.prepare(&root, &config.selected, &meta)?;
         let required = meta["javaVersion"]["majorVersion"].as_u64().unwrap_or(8) as u32;
         let java = if config.java.trim().is_empty() {
             match find_java_in(required, &config.java_paths, &config.hidden_java) {
@@ -451,13 +450,18 @@ impl Worker {
         } else {
             PathBuf::from(&config.java)
         };
-        let detected = java_major(&java).context("无法运行所选 Java，请检查路径")?;
+        let runtime = crate::java_runtime::probe(&java).context("无法运行所选 Java，请检查路径")?;
+        if !runtime.compatible {
+            bail!("Java 架构 {} 不适配当前启动器", runtime.architecture);
+        }
+        let detected = runtime.major;
         if detected < required {
             bail!("所选 Java {detected} 低于游戏需要的 Java {required}");
         }
         if required == 8 && detected > 8 {
             bail!("旧版游戏请使用 Java 8，避免旧依赖与新版 Java 不兼容");
         }
+        self.prepare(&root, &config.selected, &meta)?;
         let game_dir = if config.isolated || meta.get("rustHmclPack").is_some() {
             dir.join("game")
         } else {
@@ -484,13 +488,18 @@ impl Worker {
         fs::create_dir_all(crate::config::data_dir())?;
         let log_path = crate::config::data_dir().join("game.log");
         let log_file = Arc::new(std::sync::Mutex::new(File::create(&log_path)?));
-        let mut child = Command::new(java)
+        let mut command = Command::new(java);
+        command
             .args(&args)
             .current_dir(&game_dir)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("启动游戏失败")?;
+            .stderr(Stdio::piped());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000);
+        }
+        let mut child = command.spawn().context("启动游戏失败")?;
         self.status(format!("游戏正在运行 · PID {}", child.id()));
         let _ = self.tx.send(Event::GameStarted);
         let tx = self.tx.clone();
@@ -766,6 +775,7 @@ fn find_java_in(required: u32, registered: &[String], hidden: &[String]) -> Opti
                 .ok()
                 .filter(|runtime| {
                     runtime.major == required
+                        && runtime.compatible
                         && !crate::java_runtime::is_hidden(&runtime.path, hidden)
                 })
                 .map(|runtime| runtime.path)
@@ -786,79 +796,168 @@ fn find_managed_java(required: u32) -> Option<PathBuf> {
     .find_map(|entry| {
         crate::java_runtime::probe(entry.path())
             .ok()
-            .filter(|runtime| runtime.major == required)
+            .filter(|runtime| runtime.major == required && runtime.compatible)
             .map(|runtime| runtime.path)
     })
 }
+fn runtime_in(directory: &Path, major: u32) -> Option<crate::java_runtime::Runtime> {
+    walkdir::WalkDir::new(directory)
+        .max_depth(8)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry.file_type().is_file() && entry.file_name() == crate::java_runtime::executable()
+        })
+        .find_map(|entry| {
+            crate::java_runtime::probe(entry.path())
+                .ok()
+                .filter(|runtime| runtime.major == major && runtime.compatible)
+        })
+}
 impl Worker {
     pub fn download_java(&self, major: u32) -> Result<()> {
+        self.install_java(major).map(|_| ())
+    }
+    pub fn install_java(&self, major: u32) -> Result<PathBuf> {
         use sha2::Sha256;
+        self.check()?;
+        if !(8..=99).contains(&major) {
+            bail!("Java 主版本应在 8–99 之间");
+        }
         let platform = if os() == "osx" { "mac" } else { os() };
         let cpu = match arch() {
             "x86_64" => "x64",
-            a => a,
+            value => value,
         };
-        self.status(format!("获取 Java {major} 下载信息…"));
-        let list=self.json(&format!("https://api.adoptium.net/v3/assets/latest/{major}/hotspot?architecture={cpu}&image_type=jdk&os={platform}"))?;
+        self.status(format!("获取 Java {major} 运行环境信息…"));
+        let endpoint = |image| {
+            format!("https://api.adoptium.net/v3/assets/latest/{major}/hotspot?architecture={cpu}&image_type={image}&os={platform}")
+        };
+        let mut list = self.json(&endpoint("jre"))?;
+        if list.as_array().context("Java 下载信息格式错误")?.is_empty() {
+            self.status("当前平台使用 JDK 发行包…");
+            list = self.json(&endpoint("jdk"))?;
+        }
         let package = &list
             .as_array()
-            .and_then(|x| x.first())
+            .and_then(|items| items.first())
             .context("本平台暂时没有可用的 Java 构建")?["binary"]["package"];
         let name = str_field(package, "name")?;
+        let checksum = str_field(package, "checksum")?.to_ascii_lowercase();
+        if checksum.len() != 64 || !checksum.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            bail!("Java 下载校验信息无效");
+        }
+        let link = str_field(package, "link")?;
+        if reqwest::Url::parse(link)?.scheme() != "https" {
+            bail!("Java 下载地址必须使用 HTTPS");
+        }
+        let parent = crate::config::data_dir()
+            .join("java")
+            .join(major.to_string());
+        if let Ok(entries) = fs::read_dir(&parent) {
+            for entry in entries.filter_map(Result::ok) {
+                let label = entry.file_name().to_string_lossy().into_owned();
+                if (label == checksum || label.starts_with(&format!("{checksum}-")))
+                    && entry.file_type()?.is_dir()
+                {
+                    if let Some(runtime) = runtime_in(&entry.path(), major) {
+                        self.tx
+                            .send(Event::Java(runtime.path.to_string_lossy().into()))?;
+                        self.status(format!("Java {major} 已可用"));
+                        return Ok(runtime.path);
+                    }
+                }
+            }
+        }
         let cache = crate::config::data_dir().join("downloads");
         let archive = safe_join(&cache, name)?;
         self.status(format!("正在下载 Java {major}，请稍候…"));
-        self.download(str_field(package, "link")?, &archive, None)?;
+        self.download(link, &archive, None)?;
         let mut file = File::open(&archive)?;
-        let mut hash = Sha256::new();
-        let mut buf = [0u8; 65536];
+        let mut hasher = Sha256::new();
+        let mut buffer = [0u8; 65536];
         loop {
             self.check()?;
-            let n = file.read(&mut buf)?;
-            if n == 0 {
+            let count = file.read(&mut buffer)?;
+            if count == 0 {
                 break;
             }
-            hash.update(&buf[..n]);
+            hasher.update(&buffer[..count]);
         }
-        if format!("{:x}", hash.finalize()) != str_field(package, "checksum")? {
+        if format!("{:x}", hasher.finalize()) != checksum {
             bail!("Java 下载校验失败，请重试");
         }
-        self.status("解压 Java…");
-        let dest = crate::config::data_dir()
-            .join("java")
-            .join(major.to_string());
-        fs::create_dir_all(&dest)?;
-        if name.ends_with(".zip") {
-            let mut zip = zip::ZipArchive::new(File::open(&archive)?)?;
-            for i in 0..zip.len() {
-                self.check()?;
-                let mut entry = zip.by_index(i)?;
-                let path = safe_join(&dest, entry.name().trim_end_matches('/'))?;
-                if entry.is_dir() {
-                    fs::create_dir_all(path)?;
-                } else {
-                    fs::create_dir_all(path.parent().unwrap())?;
-                    std::io::copy(&mut entry, &mut File::create(path)?)?;
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let stage = cache.join(format!("java-stage-{major}-{}-{stamp}", std::process::id()));
+        fs::create_dir(&stage)?;
+        let installed = (|| -> Result<PathBuf> {
+            self.status(format!("解压 Java {major}…"));
+            if name.ends_with(".zip") {
+                let mut archive = zip::ZipArchive::new(File::open(&archive)?)?;
+                for i in 0..archive.len() {
+                    self.check()?;
+                    let mut entry = archive.by_index(i)?;
+                    if entry
+                        .unix_mode()
+                        .is_some_and(|mode| mode & 0o170000 == 0o120000)
+                    {
+                        bail!("Java ZIP 包包含不支持的符号链接");
+                    }
+                    let path = safe_join(&stage, entry.name().trim_end_matches('/'))?;
+                    if entry.is_dir() {
+                        fs::create_dir_all(path)?;
+                    } else {
+                        fs::create_dir_all(path.parent().context("缺少解压目录")?)?;
+                        std::io::copy(&mut entry, &mut File::create(path)?)?;
+                    }
                 }
+            } else if name.ends_with(".tar.gz") {
+                let decoder = flate2::read::GzDecoder::new(File::open(&archive)?);
+                for entry in tar::Archive::new(decoder).entries()? {
+                    self.check()?;
+                    if !entry?.unpack_in(&stage)? {
+                        bail!("Java 压缩包包含不安全路径");
+                    }
+                }
+            } else {
+                bail!("不支持的 Java 压缩格式");
             }
-        } else {
-            let gz = flate2::read::GzDecoder::new(File::open(&archive)?);
-            let mut tar = tar::Archive::new(gz);
-            for entry in tar.entries()? {
-                self.check()?;
-                let mut entry = entry?;
-                if !entry.unpack_in(&dest)? {
-                    bail!("Java 压缩包包含不安全路径");
-                }
+            self.check()?;
+            let runtime = runtime_in(&stage, major).context("解压后未找到匹配版本的 Java")?;
+            let stage_root = java_compatible_path(stage.canonicalize()?);
+            let relative = runtime
+                .path
+                .strip_prefix(&stage_root)
+                .context("Java 可执行文件超出暂存目录")?
+                .to_path_buf();
+            fs::create_dir_all(&parent)?;
+            let normal_target = parent.join(&checksum);
+            let target = if fs::symlink_metadata(&normal_target).is_ok() {
+                parent.join(format!("{checksum}-{stamp}"))
+            } else {
+                normal_target
+            };
+            self.check()?;
+            crate::file_ops::commit_new(&stage, &target)?;
+            let runtime = crate::java_runtime::probe(&target.join(relative))?;
+            anyhow::ensure!(runtime.major == major, "发布后的 Java 版本不匹配");
+            Ok(runtime.path)
+        })();
+        if stage.exists() {
+            if let Err(error) = crate::file_ops::remove_owned_directory(&stage, &cache) {
+                let _ = self
+                    .tx
+                    .send(Event::Log(format!("Java 暂存目录清理未完成：{error:#}")));
             }
         }
-        let java = find_managed_java(major).context("解压后未找到可用 Java")?;
+        let java = installed?;
         self.tx.send(Event::Java(java.to_string_lossy().into()))?;
         self.status(format!("Java {major} 已安装"));
-        Ok(())
+        Ok(java)
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

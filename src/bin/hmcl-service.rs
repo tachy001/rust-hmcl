@@ -17,6 +17,9 @@ enum Request {
     Task,
     Versions,
     Runtimes,
+    RegisterJava {
+        path: String,
+    },
     ModFiles,
     ModEnvironment {
         id: String,
@@ -49,6 +52,7 @@ fn execute(service: &Service, request: Request) -> anyhow::Result<Value> {
         Request::Task => serde_json::to_value(service.task()?)?,
         Request::Versions => serde_json::to_value(service.versions()?)?,
         Request::Runtimes => serde_json::to_value(service.runtimes()?)?,
+        Request::RegisterJava { path } => serde_json::to_value(service.register_java(&path)?)?,
         Request::ModFiles => serde_json::to_value(service.mod_files()?)?,
         Request::ModEnvironment { id } => serde_json::to_value(service.mod_environment(&id)?)?,
         Request::SearchMods { id, query } => {

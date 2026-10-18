@@ -99,6 +99,35 @@ async fn pick_modpack() -> Result<Option<String>, String> {
     .await
 }
 #[tauri::command]
+async fn pick_java() -> Result<Option<String>, String> {
+    blocking(move || {
+        anyhow::ensure!(
+            !std::env::args().any(|argument| argument == "--verify-hidden-ui"),
+            "隐藏验证模式不打开文件选择器"
+        );
+        let dialog = rfd::FileDialog::new().set_title("选择 Java 可执行文件");
+        #[cfg(windows)]
+        let dialog = dialog.add_filter("Java 可执行文件", &["exe"]);
+        dialog
+            .pick_file()
+            .map(|path| {
+                path.to_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| anyhow::anyhow!("文件路径不是有效文本"))
+            })
+            .transpose()
+    })
+    .await
+}
+#[tauri::command]
+async fn register_java(
+    path: String,
+    service: State<'_, Service>,
+) -> Result<rust_hmcl::service::RegisteredJava, String> {
+    let service = service.inner().clone();
+    blocking(move || service.register_java(&path)).await
+}
+#[tauri::command]
 async fn inspect_modpack(
     path: String,
     service: State<'_, Service>,
@@ -197,6 +226,8 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            pick_java,
+            register_java,
             pick_modpack,
             inspect_modpack,
             pick_import,
