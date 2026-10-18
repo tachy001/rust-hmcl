@@ -2,6 +2,8 @@
 
 目标保持为完整还原参考 HMCL 的界面、交互、动画和启动器功能。Rust 启动器本身无需 Java，游戏仍由 Java 运行，支持 Windows、Linux 和 macOS。不能把局部界面更新或编译通过视为完整还原。
 
+用户新增的 PCL 源码位于相邻目录 `../PCL-main/`，作为交互细节和启动器流程的补充参考。已审阅的入口与内容使用说明见 `REFERENCE-SOURCES.md`；HMCL 仍是还原验收依据。
+
 参照为本机相邻目录 `../HMCL-main/`，重点源文件如下：
 
 - 首页：`HMCL/src/main/java/org/jackhuang/hmcl/ui/main/MainPage.java`。
