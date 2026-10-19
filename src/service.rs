@@ -67,6 +67,13 @@ pub enum Job {
         #[serde(default)]
         name: Option<String>,
     },
+    Forge {
+        id: String,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        version: Option<String>,
+    },
     InstallMod {
         id: String,
         project: String,
@@ -392,6 +399,11 @@ impl Service {
         | Job::Quilt {
             id,
             name: Some(name),
+        }
+        | Job::Forge {
+            id,
+            name: Some(name),
+            ..
         } = &job
         {
             crate::instance_ops::validate_name(name)?;
@@ -448,6 +460,16 @@ impl Service {
             | Job::Fabric { id, .. }
             | Job::Quilt { id, .. } => {
                 game::version_dir(Path::new(&config.game_dir), id)?;
+            }
+            Job::Forge { id, version, .. } => {
+                game::version_dir(Path::new(&config.game_dir), id)?;
+                if let Some(version) = version {
+                    crate::forge::validate_version(version)?;
+                }
+                let meta = crate::metadata::resolve(Path::new(&config.game_dir), id)?;
+                if meta["javaVersion"]["majorVersion"].as_u64().unwrap_or(8) < 17 {
+                    bail!("Forge 自动安装目前需要使用 Java 17 及以上的现代游戏版本");
+                }
             }
         }
         let id = task.id + 1;
@@ -539,7 +561,11 @@ impl Service {
                 }
                 Job::Repair { id } => {
                     let metadata = crate::metadata::resolve(root, &id)?;
-                    worker.prepare(root, &id, &metadata)?;
+                    if let Some(version) = metadata["rustHmclForge"]["version"].as_str() {
+                        worker.install_forge(&config, &id, Some(&id), Some(version), true)?;
+                    } else {
+                        worker.prepare(root, &id, &metadata)?;
+                    }
                 }
                 Job::Java { major } => {
                     let path = worker.install_java(major)?;
@@ -557,6 +583,26 @@ impl Service {
                 Job::Quilt { id, name } => {
                     config.selected =
                         worker.install_loader(root, &id, Loader::Quilt, None, name.as_deref())?;
+                }
+                Job::Forge { id, name, version } => {
+                    let installed = worker.install_forge(
+                        &config,
+                        &id,
+                        name.as_deref(),
+                        version.as_deref(),
+                        false,
+                    )?;
+                    if !java_runtime::is_hidden(&installed.java, &config.java_paths) {
+                        config
+                            .java_paths
+                            .push(installed.java.to_string_lossy().into_owned());
+                    }
+                    config
+                        .version_settings
+                        .entry(installed.id.clone())
+                        .or_default()
+                        .isolated = Some(true);
+                    config.selected = installed.id;
                 }
                 Job::InstallMod { id, project } => {
                     config.selected = id;
@@ -630,7 +676,21 @@ mod tests {
                     name: Some(name.into())
                 })
                 .is_err());
+            assert!(service
+                .start(Job::Forge {
+                    id: "source".into(),
+                    name: Some(name.into()),
+                    version: None
+                })
+                .is_err());
         }
+        assert!(service
+            .start(Job::Forge {
+                id: "source".into(),
+                name: None,
+                version: Some("../bad".into())
+            })
+            .is_err());
         assert_eq!(service.task().unwrap().id, 0);
         assert_eq!(
             serde_json::to_value(service.config().unwrap()).unwrap(),
@@ -736,6 +796,23 @@ mod tests {
         let environment = service.mod_environment("fabric-sample").unwrap();
         assert_eq!(environment.game, "1.20.1");
         assert_eq!(environment.loader, "fabric");
+        let forge = root.join("versions/forge-sample");
+        std::fs::create_dir(&forge).unwrap();
+        std::fs::write(forge.join("forge-sample.json"), r#"{"id":"forge-sample","inheritsFrom":"1.20.1","rustHmclForge":{"version":"47.4.10"},"libraries":[]}"#).unwrap();
+        let environment = service.mod_environment("forge-sample").unwrap();
+        assert_eq!(environment.game, "1.20.1");
+        assert_eq!(environment.loader, "forge");
+        assert_eq!(
+            service
+                .snapshot()
+                .unwrap()
+                .instances
+                .iter()
+                .find(|item| item.id == "forge-sample")
+                .unwrap()
+                .icon,
+            "forge"
+        );
         assert_eq!(service.snapshot().unwrap().config.selected, "1.20.1");
         assert!(service.search_mods("fabric-sample", " ").is_err());
         assert!(service

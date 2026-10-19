@@ -164,6 +164,22 @@ try {
     invoke('start_job', { job: { kind: 'fabric', id: 'native-fixture', name: 'native-fixture' } }),
   );
   assert.equal((await invoke('task')).id, beforeLoaderAlias.id);
+  await assert.rejects(
+    invoke('start_job', { job: { kind: 'forge', id: 'native-fixture', name: 'native-fixture' } }),
+  );
+  await assert.rejects(
+    invoke('start_job', { job: { kind: 'forge', id: 'native-fixture', version: '../bad' } }),
+  );
+  assert.equal((await invoke('task')).id, beforeLoaderAlias.id);
+  assert.equal(
+    await page.evaluate(async () => {
+      const image = new Image();
+      image.src = '/aster/forge.svg';
+      await image.decode();
+      return image.naturalWidth > 0;
+    }),
+    true,
+  );
   const configBefore = await readFile(join(fixture, 'config.json'));
   await assert.rejects(invoke('update_config', { config: { ...snapshot.config, memory: 1 } }));
   assert.deepEqual(await readFile(join(fixture, 'config.json')), configBefore);
@@ -260,7 +276,7 @@ try {
   await page.getByRole('button', { name: '清空筛选', exact: true }).click();
   await page.getByRole('button', { name: '发现模组', exact: true }).click();
   await expect(page.getByText('此实例暂不能在线安装模组', { exact: true })).toBeVisible();
-  await expect(page.locator('.mod-notice')).toContainText('请先选择 Fabric 或 Quilt');
+  await expect(page.locator('.mod-notice')).toContainText('请先选择 Fabric、Quilt 或 Forge');
   const fabricEnvironment = join(fixture, 'minecraft', 'versions', 'native-fabric');
   await mkdir(fabricEnvironment, { recursive: true });
   await writeFile(
@@ -276,6 +292,21 @@ try {
     loader: 'fabric',
   });
   assert.equal((await invoke('snapshot')).config.selected, 'native-fixture');
+  const forgeEnvironment = join(fixture, 'minecraft', 'versions', 'native-forge');
+  await mkdir(forgeEnvironment);
+  await writeFile(
+    join(forgeEnvironment, 'native-forge.json'),
+    JSON.stringify({
+      id: 'native-forge',
+      inheritsFrom: 'native-fixture',
+      rustHmclForge: { version: '47.4.10' },
+      libraries: [],
+    }),
+  );
+  assert.deepEqual(await invoke('mod_environment', { id: 'native-forge' }), {
+    game: 'native-fixture',
+    loader: 'forge',
+  });
   const invalidSearch = await page.evaluate(async () => {
     try {
       await window.__TAURI_INTERNALS__.invoke('search_mods', {
@@ -287,7 +318,7 @@ try {
       return String(error);
     }
   });
-  assert.match(invalidSearch, /请先选择 Fabric 或 Quilt/);
+  assert.match(invalidSearch, /请先选择 Fabric、Quilt 或 Forge/);
   await settle();
   await page.screenshot({ path: join(output, 'native-mod-discovery.png'), omitBackground: true });
   const invalidMod = await page.evaluate(async () => {
@@ -483,6 +514,7 @@ try {
       'bundled Vue assets and CSP',
       'snapshot IPC',
       'loader name conflict is rejected before starting a native worker',
+      'Forge rejects invalid inputs before executing Java and the bundled original anvil icon renders',
       'invalid configuration does not write',
       'traversal rejected before game start',
       'offline account persistence',

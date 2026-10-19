@@ -129,6 +129,12 @@ async function validatePlan(id, mainClass) {
 }
 try {
   console.log(`Isolated fixture: ${fixture}`);
+  const configuration = (await rpc('snapshot')).config;
+  assert.equal(
+    resolve(configuration.game_dir),
+    resolve(game),
+    'Reused configuration must target its own isolated game directory',
+  );
   const manifest = await rpc('versions');
   const entry = manifest.find((item) => item.id === version);
   assert.ok(entry?.sha1);

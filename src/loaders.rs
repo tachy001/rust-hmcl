@@ -112,7 +112,7 @@ impl Worker {
     }
 }
 
-fn publish_profile(dir: &Path, id: &str, profile: &Value) -> Result<()> {
+pub(crate) fn publish_profile(dir: &Path, id: &str, profile: &Value) -> Result<()> {
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_nanos();

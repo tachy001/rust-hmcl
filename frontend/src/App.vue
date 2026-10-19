@@ -14,6 +14,7 @@ import LaunchConsole from './LaunchConsole.vue';
 import InstanceSettings from './InstanceSettings.vue';
 import {
   api,
+  instanceIcon,
   desktopAvailable,
   type Config,
   type Job,
@@ -60,6 +61,7 @@ const releases = ref<Version[]>([]),
   packs = ref<Pack[]>([]);
 const query = ref(''),
   loaderName = ref(''),
+  forgeVersion = ref(''),
   favoritesOnly = ref(false),
   snapshots = ref(false),
   username = ref('');
@@ -117,6 +119,7 @@ watch(
   () => data.value?.config.selected,
   () => {
     loaderName.value = '';
+    forgeVersion.value = '';
   },
 );
 const versions = computed(
@@ -260,7 +263,7 @@ async function recoverLaunch(action: string) {
   if (action === 'repair') {
     dialog.value = {
       title: '校验并补全游戏文件',
-      message: `将校验 ${id} 的游戏本体与依赖并下载缺失文件。此操作不会自动停用模组或修改游戏设置。`,
+      message: `将校验 ${id} 的游戏本体与依赖并下载缺失文件。${task.value.clues.some((clue) => clue.title === 'Forge 安装产物需要修复') ? 'Forge 依赖会使用 Java 和官方安装器在独立副本中重建。' : ''}此操作不会自动停用模组或修改游戏设置。`,
       confirm: async () => {
         await start({ kind: 'repair', id });
       },
@@ -741,7 +744,7 @@ onUnmounted(() => {
                     :checked="instance.id === data?.config.selected"
                     :disabled="task.running"
                     @click.prevent="select(instance.id)"
-                  /><img :src="`/hmcl/${instance.icon}.png`" alt="" /><button
+                  /><img :src="instanceIcon(instance.icon)" alt="" /><button
                     class="row-content"
                     :disabled="task.running"
                     @click="inspect(instance.id)"
@@ -973,7 +976,39 @@ onUnmounted(() => {
                     <img src="/hmcl/quilt.png" alt="" />安装 Quilt
                   </button>
                 </div>
-                <p class="subtitle">Forge／NeoForge 安装尚未实现。</p>
+                <section class="forge-installer">
+                  <div>
+                    <img src="/aster/forge.svg" alt="" /><span
+                      ><b>Forge</b><small>现代安装器 · Java 17 及以上</small></span
+                    >
+                  </div>
+                  <p>
+                    安装时使用游戏所需的
+                    Java，可按设置自动下载。安装器在独立副本中运行，新实例默认使用独立游戏目录。
+                  </p>
+                  <label
+                    >Forge 版本（可选）<input
+                      v-model="forgeVersion"
+                      aria-label="Forge 版本"
+                      :disabled="task.running"
+                      placeholder="留空使用官方推荐版本"
+                  /></label>
+                  <button
+                    :disabled="task.running"
+                    @click="
+                      data &&
+                      start({
+                        kind: 'forge',
+                        id: data.config.selected,
+                        name: loaderName.trim() || undefined,
+                        version: forgeVersion.trim() || undefined,
+                      })
+                    "
+                  >
+                    <Icon name="download" />安装 Forge
+                  </button>
+                </section>
+                <p class="subtitle">NeoForge 安装尚未实现。</p>
               </div>
               <ModLibrary
                 v-if="tab === 'mods' && data"
@@ -1062,7 +1097,7 @@ onUnmounted(() => {
           task.status || '准备就绪'
         }}</span
         ><template v-if="task.running"
-          ><progress :value="task.progress" max="1"></progress
+          ><progress :value="task.progress > 0 ? task.progress : undefined" max="1"></progress
           ><button @click="stop">{{ task.game_running ? '结束游戏' : '取消' }}</button></template
         >
       </footer>

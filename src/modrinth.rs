@@ -33,7 +33,15 @@ pub fn environment(config: &Config) -> Result<(String, String)> {
         .context("缺少基础版本")?
         .to_owned();
     let libraries = meta["libraries"].as_array().context("缺少依赖库")?;
-    let loader = if libraries.iter().any(|l| {
+    let loader = if meta["rustHmclForge"].is_object()
+        || libraries.iter().any(|library| {
+            library["name"].as_str().is_some_and(|name| {
+                name.starts_with("net.minecraftforge:fmlloader:")
+                    || name.starts_with("net.minecraftforge:forge:")
+            })
+        }) {
+        "forge"
+    } else if libraries.iter().any(|l| {
         l["name"]
             .as_str()
             .is_some_and(|n| n.starts_with("org.quiltmc:quilt-loader:"))
@@ -46,7 +54,7 @@ pub fn environment(config: &Config) -> Result<(String, String)> {
     }) {
         "fabric"
     } else {
-        bail!("请先选择 Fabric 或 Quilt 游戏版本，再搜索和安装模组");
+        bail!("请先选择 Fabric、Quilt 或 Forge 游戏版本，再搜索和安装模组");
     };
     Ok((game, loader.into()))
 }

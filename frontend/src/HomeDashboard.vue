@@ -3,7 +3,7 @@ import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import Icon from './Icon.vue';
 import WorldScene from './WorldScene.vue';
 import FavoriteToggle from './FavoriteToggle.vue';
-import type { Snapshot, Task } from './api';
+import { instanceIcon, type Snapshot, type Task } from './api';
 const props = defineProps<{ data: Snapshot | null; task: Task; menu: boolean }>();
 const emit = defineEmits<{
   navigate: [page: 'versions' | 'download' | 'java' | 'settings'];
@@ -173,7 +173,7 @@ onUnmounted(() => {
                 :aria-current="instance.id === current?.id ? 'true' : undefined"
                 @click="emit('select', instance.id)"
               >
-                <img :src="`/hmcl/${instance.icon}.png`" alt="" /><span
+                <img :src="instanceIcon(instance.icon)" alt="" /><span
                   >{{ instance.id }}<small>{{ instance.subtitle }}</small></span
                 ><Icon v-if="instance.id === current?.id" name="check" />
               </button>
@@ -242,7 +242,7 @@ onUnmounted(() => {
             :class="{ 'is-current': instance.id === current?.id }"
           >
             <div class="game-card-top">
-              <div class="game-cover"><img :src="`/hmcl/${instance.icon}.png`" alt="" /></div>
+              <div class="game-cover"><img :src="instanceIcon(instance.icon)" alt="" /></div>
               <FavoriteToggle
                 :id="instance.id"
                 :favorite="instance.favorite"

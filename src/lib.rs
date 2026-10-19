@@ -4,6 +4,7 @@ pub mod catalog;
 pub mod config;
 pub mod diagnostics;
 mod file_ops;
+pub mod forge;
 pub mod game;
 pub mod imports;
 pub mod instance_ops;

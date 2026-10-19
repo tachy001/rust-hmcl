@@ -318,6 +318,48 @@ select:focus {
   font-size: 11px;
   line-height: 1.8;
 }
+.forge-installer {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--field);
+}
+.forge-installer > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.forge-installer > div img {
+  width: 36px;
+  height: 36px;
+}
+.forge-installer b {
+  display: block;
+  font-size: 14px;
+}
+.forge-installer small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.forge-installer p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+.forge-installer label {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  margin: 12px 0;
+}
+.forge-installer input {
+  width: 100%;
+  max-width: 400px;
+}
 .library-controls {
   display: flex;
   gap: 10px;

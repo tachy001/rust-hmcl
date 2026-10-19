@@ -115,6 +115,7 @@ export type Job =
   | { kind: 'import_files'; id: string; content: 'mods' | 'resources'; paths: string[] }
   | { kind: 'launch' | 'install' | 'repair'; id: string }
   | { kind: 'fabric' | 'quilt'; id: string; name?: string }
+  | { kind: 'forge'; id: string; name?: string; version?: string }
   | { kind: 'java'; major: number }
   | { kind: 'install_mod'; id: string; project: string }
   | { kind: 'rename'; id: string; name: string }
@@ -145,3 +146,5 @@ export const api = {
     invoke<Pack[]>('enable_resources', { names, enabled, confirmed }),
 };
 export const desktopAvailable = () => '__TAURI_INTERNALS__' in window;
+export const instanceIcon = (icon: string) =>
+  icon === 'forge' ? '/aster/forge.svg' : `/hmcl/${icon}.png`;

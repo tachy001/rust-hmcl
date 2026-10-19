@@ -31,17 +31,35 @@ fn describe(profile: &Value) -> Description {
         .or_else(|| profile["id"].as_str())
         .unwrap_or("未知版本");
     let libraries = profile["libraries"].as_array();
-    let loader = libraries
-        .into_iter()
-        .flatten()
-        .filter_map(|lib| lib["name"].as_str())
-        .find_map(|name| {
-            if let Some(version) = name.strip_prefix("net.fabricmc:fabric-loader:") {
-                Some(("fabric", "Fabric", version))
-            } else {
-                name.strip_prefix("org.quiltmc:quilt-loader:")
-                    .map(|version| ("quilt", "Quilt", version))
-            }
+    let loader = profile["rustHmclForge"]["version"]
+        .as_str()
+        .map(|version| ("forge", "Forge", version))
+        .or_else(|| {
+            libraries
+                .into_iter()
+                .flatten()
+                .filter_map(|lib| lib["name"].as_str())
+                .find_map(|name| {
+                    if let Some(version) = name.strip_prefix("net.fabricmc:fabric-loader:") {
+                        Some(("fabric", "Fabric", version))
+                    } else if let Some(coordinate) = name
+                        .strip_prefix("net.minecraftforge:fmlloader:")
+                        .or_else(|| name.strip_prefix("net.minecraftforge:forge:"))
+                    {
+                        let coordinate = coordinate.split(':').next().unwrap_or(coordinate);
+                        Some((
+                            "forge",
+                            "Forge",
+                            coordinate
+                                .split_once('-')
+                                .map(|(_, version)| version)
+                                .unwrap_or(coordinate),
+                        ))
+                    } else {
+                        name.strip_prefix("org.quiltmc:quilt-loader:")
+                            .map(|version| ("quilt", "Quilt", version))
+                    }
+                })
         });
     match loader {
         Some((icon, name, version)) => Description {
@@ -61,6 +79,11 @@ mod tests {
     use serde_json::json;
     #[test]
     fn inherited_profiles_show_game_and_loader_instead_of_instance_id() {
+        let forge = describe(
+            &json!({"id":"Forge Alias","_gameVersion":"1.20.1","libraries":[{"name":"net.minecraftforge:fmlloader:1.20.1-47.4.10"}]}),
+        );
+        assert_eq!(forge.icon, "forge");
+        assert_eq!(forge.subtitle, "Minecraft 1.20.1 · Forge 47.4.10");
         let renamed = describe(
             &json!({"id":"My World","_clientVersion":"My Vanilla","_gameVersion":"1.20.1","libraries":[{"name":"net.fabricmc:fabric-loader:0.16.0"}]}),
         );

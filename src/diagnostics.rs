@@ -12,6 +12,12 @@ pub struct Clue {
 pub fn launch_clues(error: &str, logs: &[String]) -> Vec<Clue> {
     let rules: &[(&str, &[&str], &str, &str)] = &[
         (
+            "Forge 安装产物需要修复",
+            &["Forge 安装产物缺失或损坏"],
+            "校验该实例，在独立副本中重新执行官方 Forge 安装器以重建依赖；需要 Java。",
+            "repair",
+        ),
+        (
             "Java 版本或路径需要检查",
             &[
                 "UnsupportedClassVersionError",
@@ -104,6 +110,10 @@ mod tests {
     }
     #[test]
     fn captures_actual_evidence_and_multiple_independent_clues() {
+        assert_eq!(
+            launch_clues("Forge 安装产物缺失或损坏，请在游戏库中校验修复", &[])[0].action,
+            "repair"
+        );
         let line = "[main/ERROR] Incompatible mods found!";
         let clues = launch_clues("无法运行所选 Java，请检查路径", &[line.into()]);
         assert_eq!(clues.len(), 2);

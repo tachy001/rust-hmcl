@@ -170,6 +170,14 @@ impl Worker {
         self.check()?;
         Ok(self.client.get(url).send()?.error_for_status()?.json()?)
     }
+    pub(crate) fn text(&self, url: &str) -> Result<String> {
+        self.check()?;
+        let response = self.client.get(url).send()?.error_for_status()?;
+        let mut text = String::new();
+        response.take(65536).read_to_string(&mut text)?;
+        self.check()?;
+        Ok(text)
+    }
     pub fn manifest(&self) -> Result<()> {
         self.status("正在获取 Minecraft 版本列表…");
         let cache = crate::config::data_dir().join("version-manifest.json");
@@ -295,16 +303,31 @@ impl Worker {
         Ok(())
     }
     pub fn prepare(&self, root: &Path, id: &str, meta: &Value) -> Result<()> {
+        self.prepare_inner(root, id, meta, true)
+    }
+    pub(crate) fn prepare_without_client(&self, root: &Path, id: &str, meta: &Value) -> Result<()> {
+        self.prepare_inner(root, id, meta, false)
+    }
+    fn prepare_inner(
+        &self,
+        root: &Path,
+        id: &str,
+        meta: &Value,
+        include_client: bool,
+    ) -> Result<()> {
+        crate::forge::validate_artifacts(root, meta)?;
         let dir = version_dir(root, id)?;
-        let client_id = meta["_clientVersion"].as_str().unwrap_or(id);
-        let client_dir = version_dir(root, client_id)?;
-        let jar = &meta["downloads"]["client"];
-        self.status("下载游戏主文件…");
-        self.download(
-            str_field(jar, "url")?,
-            &client_dir.join(format!("{client_id}.jar")),
-            jar["sha1"].as_str(),
-        )?;
+        if include_client {
+            let client_id = meta["_clientVersion"].as_str().unwrap_or(id);
+            let client_dir = version_dir(root, client_id)?;
+            let jar = &meta["downloads"]["client"];
+            self.status("下载游戏主文件…");
+            self.download(
+                str_field(jar, "url")?,
+                &client_dir.join(format!("{client_id}.jar")),
+                jar["sha1"].as_str(),
+            )?;
+        }
         let libs = meta["libraries"].as_array().context("缺少依赖库列表")?;
         let native_dir = dir.join("rust-natives");
         fs::create_dir_all(&native_dir)?;
@@ -427,23 +450,20 @@ impl Worker {
         }
         Ok(())
     }
-    pub fn launch(&self, config: &crate::config::Config) -> Result<()> {
-        let config = config.for_selected();
-        config.validate()?;
-        if config.selected.is_empty() {
-            bail!("请先选择游戏版本");
-        }
-        let root =
-            java_compatible_path(fs::canonicalize(&config.game_dir).context("游戏目录不存在")?);
-        let dir = version_dir(&root, &config.selected)?;
-        let meta = crate::metadata::resolve(&root, &config.selected)?;
-        let required = meta["javaVersion"]["majorVersion"].as_u64().unwrap_or(8) as u32;
+    pub(crate) fn resolve_java(
+        &self,
+        config: &crate::Config,
+        required: u32,
+    ) -> Result<crate::java_runtime::Runtime> {
         let java = if config.java.trim().is_empty() {
             match find_java_in(required, &config.java_paths, &config.hidden_java) {
                 Some(java) => java,
                 None if config.auto_java => {
-                    self.download_java(required)?;
-                    find_managed_java(required).context("未找到下载的 Java")?
+                    let path = self.install_java(required)?;
+                    if crate::java_runtime::is_hidden(&path, &config.hidden_java) {
+                        bail!("所需 Java {required} 已隐藏，请先在 Java 管理中恢复该环境");
+                    }
+                    path
                 }
                 None => bail!("需要 Java {required}，请在 Java 管理页面下载或设置路径"),
             }
@@ -461,6 +481,20 @@ impl Worker {
         if required == 8 && detected > 8 {
             bail!("旧版游戏请使用 Java 8，避免旧依赖与新版 Java 不兼容");
         }
+        Ok(runtime)
+    }
+    pub fn launch(&self, config: &crate::config::Config) -> Result<()> {
+        let config = config.for_selected();
+        config.validate()?;
+        if config.selected.is_empty() {
+            bail!("请先选择游戏版本");
+        }
+        let root =
+            java_compatible_path(fs::canonicalize(&config.game_dir).context("游戏目录不存在")?);
+        let dir = version_dir(&root, &config.selected)?;
+        let meta = crate::metadata::resolve(&root, &config.selected)?;
+        let required = meta["javaVersion"]["majorVersion"].as_u64().unwrap_or(8) as u32;
+        let java = self.resolve_java(&config, required)?.path;
         self.prepare(&root, &config.selected, &meta)?;
         let game_dir = if config.isolated || meta.get("rustHmclPack").is_some() {
             dir.join("game")
@@ -569,7 +603,7 @@ pub(crate) fn java_compatible_path(path: PathBuf) -> PathBuf {
         path
     }
 }
-fn verify(path: &Path, expected: &str) -> Result<bool> {
+pub(crate) fn verify(path: &Path, expected: &str) -> Result<bool> {
     Ok(sha1_file(path)?.eq_ignore_ascii_case(expected))
 }
 pub(crate) fn sha1_file(path: &Path) -> Result<String> {
@@ -770,6 +804,7 @@ pub fn java_major(path: &Path) -> Result<u32> {
 fn find_java_in(required: u32, registered: &[String], hidden: &[String]) -> Option<PathBuf> {
     crate::java_runtime::candidates(registered)
         .into_iter()
+        .filter(|path| !crate::java_runtime::is_hidden(path, hidden))
         .find_map(|path| {
             crate::java_runtime::probe(&path)
                 .ok()
@@ -780,25 +815,6 @@ fn find_java_in(required: u32, registered: &[String], hidden: &[String]) -> Opti
                 })
                 .map(|runtime| runtime.path)
         })
-}
-fn find_managed_java(required: u32) -> Option<PathBuf> {
-    walkdir::WalkDir::new(
-        crate::config::data_dir()
-            .join("java")
-            .join(required.to_string()),
-    )
-    .max_depth(7)
-    .into_iter()
-    .filter_map(Result::ok)
-    .filter(|entry| {
-        entry.file_type().is_file() && entry.file_name() == crate::java_runtime::executable()
-    })
-    .find_map(|entry| {
-        crate::java_runtime::probe(entry.path())
-            .ok()
-            .filter(|runtime| runtime.major == required && runtime.compatible)
-            .map(|runtime| runtime.path)
-    })
 }
 fn runtime_in(directory: &Path, major: u32) -> Option<crate::java_runtime::Runtime> {
     walkdir::WalkDir::new(directory)
