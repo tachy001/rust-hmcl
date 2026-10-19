@@ -32,6 +32,19 @@
 检查原版客户端、已有启动配置及 Forge 实例配置不变，70 个安装产物通过校验，暂存目录清理完成。
 已验证 Forge 模组环境识别和真实 Modrinth 搜索。
 
+提交 `8d14a46` 的最终本地检查：68 项核心检查、36 项界面检查和 8 项控制台组件检查通过。
+实际安装使用新的独立目录 `forge-online-proof-NQOl8d`，完整走过首次安装、损坏产物修复、
+观测安装器存活后取消、确认子进程退出，以及 JEI 安装；原版及已有配置保留，暂存目录已清理。
+安装器 SHA-1 为 `66bfea9963bfa60d88bab6b2750e74a958392715`；
+JEI 文件 `jei-1.20.1-forge-15.56.0.205.jar` 的 SHA-1 为 `7f64b7f8fde7f001ef054dabe3618a8780ba2650`。
+此记录是 Windows 隔离测试证据，尚未验证三端真实游戏运行。
+
+同一提交的 [远端构建](https://github.com/tachy001/rust-hmcl/actions/runs/39244940477)
+已通过 Windows、Linux、macOS ARM／Intel 四个新版 Tauri 构建。
+Windows 的 21 项原生检查在远端及本机隐藏窗口均通过，且无外置 WebView2Loader DLL 导入。
+下载产物的 GitHub SHA-256 已核对；远端与本机证据均对应同一个 EXE，SHA-256 为
+`a9541d8ac79e6e64cf012ddab953ddc8fece26e75c7ce984cc97a75898d1deb5`。
+
 ```sh
 node scripts/test-forge-online.mjs --game-dir <安装验证目录中的minecraft> --java <Java可执行文件>
 node scripts/test-forge-online.mjs --fixture .tools/forge-online-proof-xxxxxx --repair-corruption --check-cancel --search --install-mod

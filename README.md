@@ -6,7 +6,7 @@
 
 ## 使用
 
-Windows 预览版见 [Releases](https://github.com/tachy001/rust-hmcl/releases)。下载 `AsterLauncher.exe` 可单独运行，完整 ZIP 另附说明与许可证。WebView2 加载器已静态链接，无需外置 DLL；Windows 仍需要系统 WebView2 Runtime。本机单文件发行目录为 `dist/aster-windows-x64-single-exe/`。
+Windows 预览版见 [Releases](https://github.com/tachy001/rust-hmcl/releases)。下载 `AsterLauncher.exe` 可单独运行，完整 ZIP 另附说明与许可证。WebView2 加载器已静态链接，无需外置 DLL；Windows 仍需要系统 WebView2 Runtime。本机新版使用 `dist/aster-windows-x64-<提交号>/` 保存，具体程序来源见目录内 `build-info.json`。
 
 1. 在侧栏底部的账户入口添加离线用户名。
 2. 在“下载”选择 Minecraft 版本并安装。
