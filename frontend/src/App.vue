@@ -59,6 +59,7 @@ const releases = ref<Version[]>([]),
   mods = ref<Mod[]>([]),
   packs = ref<Pack[]>([]);
 const query = ref(''),
+  loaderName = ref(''),
   favoritesOnly = ref(false),
   snapshots = ref(false),
   username = ref('');
@@ -111,6 +112,12 @@ const title = computed(() =>
 );
 const current = computed(() =>
   data.value?.instances.find((item) => item.id === data.value?.config.selected),
+);
+watch(
+  () => data.value?.config.selected,
+  () => {
+    loaderName.value = '';
+  },
 );
 const versions = computed(
   () =>
@@ -929,15 +936,39 @@ onUnmounted(() => {
               <div v-if="tab === 'components'" class="panel">
                 <h2>游戏组件</h2>
                 <p>{{ current?.subtitle }}</p>
+                <label class="loader-name-field"
+                  >新实例名称（可选）<input
+                    v-model="loaderName"
+                    aria-label="加载器实例名称"
+                    :disabled="task.running"
+                    placeholder="留空使用加载器默认名称"
+                /></label>
+                <p class="loader-install-note">
+                  安装会创建新的加载器实例，保留当前游戏。已有同名实例不会覆盖，可在游戏库中校验。
+                </p>
                 <div class="toolbar">
                   <button
                     :disabled="task.running"
-                    @click="data && start({ kind: 'fabric', id: data.config.selected })"
+                    @click="
+                      data &&
+                      start({
+                        kind: 'fabric',
+                        id: data.config.selected,
+                        name: loaderName.trim() || undefined,
+                      })
+                    "
                   >
                     <img src="/hmcl/fabric.png" alt="" />安装 Fabric</button
                   ><button
                     :disabled="task.running"
-                    @click="data && start({ kind: 'quilt', id: data.config.selected })"
+                    @click="
+                      data &&
+                      start({
+                        kind: 'quilt',
+                        id: data.config.selected,
+                        name: loaderName.trim() || undefined,
+                      })
+                    "
                   >
                     <img src="/hmcl/quilt.png" alt="" />安装 Quilt
                   </button>

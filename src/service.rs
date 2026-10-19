@@ -59,9 +59,13 @@ pub enum Job {
     },
     Fabric {
         id: String,
+        #[serde(default)]
+        name: Option<String>,
     },
     Quilt {
         id: String,
+        #[serde(default)]
+        name: Option<String>,
     },
     InstallMod {
         id: String,
@@ -381,6 +385,26 @@ impl Service {
             bail!("已有任务正在执行");
         }
         let config = self.config()?;
+        if let Job::Fabric {
+            id,
+            name: Some(name),
+        }
+        | Job::Quilt {
+            id,
+            name: Some(name),
+        } = &job
+        {
+            crate::instance_ops::validate_name(name)?;
+            if name == id
+                || std::fs::symlink_metadata(
+                    game::version_dir(Path::new(&config.game_dir), name)?
+                        .join(format!("{name}.json")),
+                )
+                .is_ok()
+            {
+                bail!("同名实例已存在，请使用其他名称");
+            }
+        }
         match &job {
             Job::ImportPack {
                 path,
@@ -421,8 +445,8 @@ impl Service {
             Job::Launch { id }
             | Job::Install { id }
             | Job::Repair { id }
-            | Job::Fabric { id }
-            | Job::Quilt { id } => {
+            | Job::Fabric { id, .. }
+            | Job::Quilt { id, .. } => {
                 game::version_dir(Path::new(&config.game_dir), id)?;
             }
         }
@@ -526,13 +550,13 @@ impl Service {
                         !java_runtime::is_hidden(&path, std::slice::from_ref(value))
                     });
                 }
-                Job::Fabric { id } => {
+                Job::Fabric { id, name } => {
                     config.selected =
-                        worker.install_loader(root, &id, Loader::Fabric, None, None)?;
+                        worker.install_loader(root, &id, Loader::Fabric, None, name.as_deref())?;
                 }
-                Job::Quilt { id } => {
+                Job::Quilt { id, name } => {
                     config.selected =
-                        worker.install_loader(root, &id, Loader::Quilt, None, None)?;
+                        worker.install_loader(root, &id, Loader::Quilt, None, name.as_deref())?;
                 }
                 Job::InstallMod { id, project } => {
                     config.selected = id;
@@ -593,6 +617,26 @@ impl Service {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn loader_alias_rejections_are_read_only_and_legacy_requests_still_parse() {
+        let service = Service::new(Config::default());
+        let before = serde_json::to_value(service.config().unwrap()).unwrap();
+        let legacy: Job = serde_json::from_str(r#"{"kind":"fabric","id":"source"}"#).unwrap();
+        assert!(matches!(legacy, Job::Fabric { name: None, .. }));
+        for name in ["source", "../escape", ""] {
+            assert!(service
+                .start(Job::Quilt {
+                    id: "source".into(),
+                    name: Some(name.into())
+                })
+                .is_err());
+        }
+        assert_eq!(service.task().unwrap().id, 0);
+        assert_eq!(
+            serde_json::to_value(service.config().unwrap()).unwrap(),
+            before
+        );
+    }
     #[test]
     fn failed_launch_keeps_attempted_instance_without_executing_java() {
         let game_dir = std::env::temp_dir().join(format!(

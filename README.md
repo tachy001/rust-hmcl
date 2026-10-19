@@ -23,6 +23,8 @@ Windows 预览版见 [Releases](https://github.com/tachy001/rust-hmcl/releases)�
 
 日志：支持级别与关键词筛选、暂停／继续跟随和任务报告导出。启动失败会保留原始错误，并对明确日志线索提供 Java、实例设置、模组或文件校验入口。详见 [启动诊断与日志说明](docs/LAUNCH-DIAGNOSTICS.md)。
 
+加载器自动安装支持自定义新实例名称，拒绝覆盖已有实例。复制或改名后保留原 Minecraft 版本，继续用于加载器和模组匹配。实际官方下载与修复验证见 [安装验证说明](docs/INSTALL-VERIFICATION.md)。
+
 Microsoft 登录、第三方认证、Forge／NeoForge 以及部分旧界面功能仍待实现或迁移。离线账户不能进入正版认证服务器。自动验证使用隔离的手工样本，不代表已经完成真实游戏端到端验收。
 
 ## 开发

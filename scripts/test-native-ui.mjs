@@ -159,6 +159,11 @@ try {
   assert.ok(Math.abs(nativeSize.height / layout.devicePixelRatio - layout.height) <= 2);
   assert.equal(snapshot.config.player, 'NativeProof');
   assert.equal(snapshot.instances[0].id, 'native-fixture');
+  const beforeLoaderAlias = await invoke('task');
+  await assert.rejects(
+    invoke('start_job', { job: { kind: 'fabric', id: 'native-fixture', name: 'native-fixture' } }),
+  );
+  assert.equal((await invoke('task')).id, beforeLoaderAlias.id);
   const configBefore = await readFile(join(fixture, 'config.json'));
   await assert.rejects(invoke('update_config', { config: { ...snapshot.config, memory: 1 } }));
   assert.deepEqual(await readFile(join(fixture, 'config.json')), configBefore);
@@ -477,6 +482,7 @@ try {
       'four transparent antialiased corners without opaque page background',
       'bundled Vue assets and CSP',
       'snapshot IPC',
+      'loader name conflict is rejected before starting a native worker',
       'invalid configuration does not write',
       'traversal rejected before game start',
       'offline account persistence',

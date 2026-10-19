@@ -22,6 +22,11 @@ fn resolve_inner(root: &Path, id: &str, seen: &mut HashSet<String>, depth: usize
         merge(&resolve_inner(root, parent, seen, depth + 1)?, &child)?
     } else {
         let mut value = child;
+        value["_gameVersion"] = value["rustHmclGameVersion"]
+            .as_str()
+            .or_else(|| value["id"].as_str())
+            .unwrap_or(id)
+            .into();
         value["_clientVersion"] = json!(id);
         value
     };
@@ -43,7 +48,11 @@ pub fn merge(parent: &Value, child: &Value) -> Result<Value> {
         }
     }
     for (key, value) in child.as_object().context("版本配置应为 JSON 对象")? {
-        if key == "libraries" || key == "inheritsFrom" {
+        if key == "libraries"
+            || key == "inheritsFrom"
+            || key == "_gameVersion"
+            || key == "_clientVersion"
+        {
             continue;
         }
         if key == "arguments" {
@@ -122,6 +131,14 @@ pub fn normalize_libraries(meta: &mut Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn inherited_profiles_cannot_replace_resolved_game_and_client_identity() {
+        let parent = json!({"id":"renamed","_gameVersion":"1.20.1","_clientVersion":"renamed","libraries":[]});
+        let child = json!({"id":"custom-fabric","inheritsFrom":"renamed","_gameVersion":"wrong-version","_clientVersion":"wrong-jar","libraries":[]});
+        let merged = merge(&parent, &child).unwrap();
+        assert_eq!(merged["_gameVersion"], "1.20.1");
+        assert_eq!(merged["_clientVersion"], "renamed");
+    }
     #[test]
     fn maven_coordinates() {
         assert_eq!(

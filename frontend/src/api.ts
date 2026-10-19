@@ -113,7 +113,8 @@ export interface ModpackPreview {
 export type Job =
   | { kind: 'import_pack'; path: string; id: string; optional: boolean; source_sha1: string }
   | { kind: 'import_files'; id: string; content: 'mods' | 'resources'; paths: string[] }
-  | { kind: 'launch' | 'install' | 'repair' | 'fabric' | 'quilt'; id: string }
+  | { kind: 'launch' | 'install' | 'repair'; id: string }
+  | { kind: 'fabric' | 'quilt'; id: string; name?: string }
   | { kind: 'java'; major: number }
   | { kind: 'install_mod'; id: string; project: string }
   | { kind: 'rename'; id: string; name: string }

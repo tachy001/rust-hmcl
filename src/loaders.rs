@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
-use std::{fs, path::Path};
+use std::{fs, io::Write, path::Path};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Loader {
@@ -84,9 +84,11 @@ impl Worker {
     ) -> Result<String> {
         self.ensure_base(root, selected)?;
         let base = metadata::resolve(root, selected)?;
-        let game = base["_clientVersion"].as_str().unwrap_or(selected);
-        let parent = metadata::resolve(root, game)?;
+        let client = base["_clientVersion"].as_str().unwrap_or(selected);
+        let game = base["_gameVersion"].as_str().unwrap_or(client);
+        let parent = metadata::resolve(root, client)?;
         let mut profile = self.loader_profile(game, loader, version)?;
+        profile["inheritsFrom"] = client.into();
         if let Some(alias) = alias {
             profile["id"] = Value::String(alias.into());
         }
@@ -95,23 +97,95 @@ impl Worker {
             .context("缺少加载器实例名称")?
             .to_owned();
         let dir = crate::game::version_dir(root, &id)?;
+        if fs::symlink_metadata(dir.join(format!("{id}.json"))).is_ok() {
+            bail!("同名实例已存在，请使用其他名称，或在游戏库校验已有实例");
+        }
         self.status(format!("安装 {} · {game}", loader.name()));
         let merged = metadata::merge(&parent, &profile)?;
         self.prepare(root, &id, &merged)?;
         fs::create_dir_all(&dir)?;
-        let pending = dir.join("loader.pending");
-        fs::write(&pending, serde_json::to_vec_pretty(&profile)?)?;
-        fs::rename(pending, dir.join(format!("{id}.json")))?;
+        self.check()?;
+        publish_profile(&dir, &id, &profile)?;
         let _ = self.tx.send(Event::Installed(id.clone()));
         self.status(format!("{} 安装完成", loader.name()));
         Ok(id)
     }
 }
 
+fn publish_profile(dir: &Path, id: &str, profile: &Value) -> Result<()> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    let pending = dir.join(format!("loader-{}-{stamp}.pending", std::process::id()));
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&pending)?;
+    let result = (|| -> Result<()> {
+        let mut file = file;
+        file.write_all(&serde_json::to_vec_pretty(profile)?)?;
+        file.sync_all()?;
+        drop(file);
+        crate::file_ops::commit_new(&pending, &dir.join(format!("{id}.json")))?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&pending);
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::{atomic::AtomicBool, mpsc, Arc};
+    #[test]
+    fn concurrent_profile_publication_retains_one_complete_winner() {
+        let dir = std::env::temp_dir().join(format!(
+            "aster-loader-publish-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir(&dir).unwrap();
+        let canonical = dir.canonicalize().unwrap();
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let handles: Vec<_> = (0..2)
+            .map(|number| {
+                let dir = dir.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    publish_profile(
+                        &dir,
+                        "same",
+                        &serde_json::json!({"id":"same","winner":number}),
+                    )
+                })
+            })
+            .collect();
+        assert_eq!(
+            handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap().is_ok())
+                .filter(|success| *success)
+                .count(),
+            1
+        );
+        let before = fs::read(dir.join("same.json")).unwrap();
+        let profile: Value = serde_json::from_slice(&before).unwrap();
+        assert!(profile["winner"] == 0 || profile["winner"] == 1);
+        assert!(publish_profile(&dir, "same", &serde_json::json!({"replace":true})).is_err());
+        assert_eq!(fs::read(dir.join("same.json")).unwrap(), before);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+        if dir.canonicalize().unwrap() == canonical
+            && canonical.parent() == std::env::temp_dir().canonicalize().ok().as_deref()
+        {
+            fs::remove_dir_all(&canonical).unwrap();
+        }
+    }
     #[test]
     #[ignore = "requires official Fabric and Quilt endpoints"]
     fn official_loader_profiles() {

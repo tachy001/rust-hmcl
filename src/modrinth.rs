@@ -28,7 +28,7 @@ pub(crate) fn validate_project(project: &str) -> Result<()> {
 }
 pub fn environment(config: &Config) -> Result<(String, String)> {
     let meta = crate::metadata::resolve(Path::new(&config.game_dir), &config.selected)?;
-    let game = meta["_clientVersion"]
+    let game = meta["_gameVersion"]
         .as_str()
         .context("缺少基础版本")?
         .to_owned();

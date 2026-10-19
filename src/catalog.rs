@@ -25,8 +25,9 @@ pub fn load(root: &Path, ids: &[String]) -> BTreeMap<String, Description> {
 }
 
 fn describe(profile: &Value) -> Description {
-    let minecraft = profile["_clientVersion"]
+    let minecraft = profile["_gameVersion"]
         .as_str()
+        .or_else(|| profile["_clientVersion"].as_str())
         .or_else(|| profile["id"].as_str())
         .unwrap_or("未知版本");
     let libraries = profile["libraries"].as_array();
@@ -60,6 +61,10 @@ mod tests {
     use serde_json::json;
     #[test]
     fn inherited_profiles_show_game_and_loader_instead_of_instance_id() {
+        let renamed = describe(
+            &json!({"id":"My World","_clientVersion":"My Vanilla","_gameVersion":"1.20.1","libraries":[{"name":"net.fabricmc:fabric-loader:0.16.0"}]}),
+        );
+        assert_eq!(renamed.subtitle, "Minecraft 1.20.1 · Fabric 0.16.0");
         let profile = json!({"id":"my-long-instance","_clientVersion":"1.20.1","libraries":[{"name":"net.fabricmc:fabric-loader:0.19.5"}]});
         let info = describe(&profile);
         assert_eq!(info.icon, "fabric");

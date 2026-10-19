@@ -302,6 +302,22 @@ select:focus {
   background: var(--button);
   letter-spacing: 0;
 }
+.loader-name-field {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  margin: 18px 0 10px;
+}
+.loader-name-field input {
+  width: 100%;
+  max-width: 460px;
+}
+.loader-install-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
 .library-controls {
   display: flex;
   gap: 10px;

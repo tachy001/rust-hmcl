@@ -79,6 +79,11 @@ fn rewrite(bytes: &[u8], old: &str, new: &str, own: bool) -> Result<Vec<u8>> {
         bail!("实例配置不是 JSON 对象");
     }
     if own {
+        if profile["inheritsFrom"].as_str().is_none()
+            && profile["rustHmclGameVersion"].as_str().is_none()
+        {
+            profile["rustHmclGameVersion"] = profile["id"].as_str().unwrap_or(old).into();
+        }
         profile["id"] = new.into();
     }
     for field in ["jar", "inheritsFrom"] {
@@ -527,7 +532,25 @@ mod tests {
         assert!(!target.join("base.json").exists());
         let meta = crate::metadata::resolve(&fixture.root, "copied").unwrap();
         assert_eq!(meta["_clientVersion"], "copied");
+        assert_eq!(meta["_gameVersion"], "base");
         assert_eq!(meta["custom"]["keep"], "value");
+        duplicate(
+            &fixture.root,
+            "copied",
+            "second-copy",
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        rename(
+            &fixture.root,
+            "second-copy",
+            "final-name",
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        let final_meta = crate::metadata::resolve(&fixture.root, "final-name").unwrap();
+        assert_eq!(final_meta["_gameVersion"], "base");
+        assert_eq!(final_meta["_clientVersion"], "final-name");
         assert!(duplicate(&fixture.root, "base", "copied", &AtomicBool::new(false)).is_err());
     }
     #[test]
@@ -618,6 +641,7 @@ mod tests {
         );
         let meta = crate::metadata::resolve(&fixture.root, "child").unwrap();
         assert_eq!(meta["_clientVersion"], "renamed");
+        assert_eq!(meta["_gameVersion"], "base");
         let child: Value = serde_json::from_slice(
             &fs::read(fixture.root.join("versions/child/child.json")).unwrap(),
         )

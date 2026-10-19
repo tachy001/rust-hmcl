@@ -18,6 +18,9 @@ enum Request {
     TaskReport {
         task_id: u64,
     },
+    LaunchPlan {
+        id: String,
+    },
     Versions,
     Runtimes,
     RegisterJava {
@@ -54,6 +57,12 @@ fn execute(service: &Service, request: Request) -> anyhow::Result<Value> {
         Request::InspectModpack { path } => serde_json::to_value(service.inspect_modpack(&path)?)?,
         Request::Task => serde_json::to_value(service.task()?)?,
         Request::TaskReport { task_id } => serde_json::to_value(service.task_report(task_id)?)?,
+        Request::LaunchPlan { id } => {
+            let mut config = service.snapshot()?.config;
+            rust_hmcl::game::version_dir(std::path::Path::new(&config.game_dir), &id)?;
+            config.selected = id;
+            serde_json::to_value(rust_hmcl::game::launch_plan(&config)?)?
+        }
         Request::Versions => serde_json::to_value(service.versions()?)?,
         Request::Runtimes => serde_json::to_value(service.runtimes()?)?,
         Request::RegisterJava { path } => serde_json::to_value(service.register_java(&path)?)?,

@@ -163,10 +163,15 @@ try {
     if (command === 'pick_modpack') return pickerSelections.shift()?.path ?? null;
     const allowedModInstall =
       onlineModrinth && args?.job?.kind === 'install_mod' && args?.job?.id === 'online-fabric';
+    const rejectedLoaderAlias =
+      args?.job?.kind === 'fabric' &&
+      args?.job?.id === 'renamed-ui' &&
+      args?.job?.name === '1.20.1';
     if (
       command === 'start_job' &&
       !['duplicate', 'rename', 'import_files', 'import_pack'].includes(args?.job?.kind) &&
-      !allowedModInstall
+      !allowedModInstall &&
+      !rejectedLoaderAlias
     )
       throw Error('Headless UI verification never starts Java, games, downloads or installers.');
     return rpc(command, args ?? {});
@@ -724,6 +729,31 @@ try {
   await page.setViewportSize({ width: 1080, height: 700 });
   await settle();
   await page.screenshot({ path: join(output, 'instances-dark.png') });
+  assert.equal(
+    JSON.parse(
+      await readFile(
+        join(fixture, 'minecraft', 'versions', 'renamed-ui', 'renamed-ui.json'),
+        'utf8',
+      ),
+    ).rustHmclGameVersion,
+    '1.20.1',
+  );
+  assert.equal(
+    afterCopy.instances.find((item) => item.id === 'renamed-ui').subtitle,
+    'Minecraft 1.20.1',
+  );
+  await page.getByRole('button', { name: '管理 renamed-ui', exact: true }).click();
+  await page.getByRole('button', { name: '自动安装', exact: true }).click();
+  await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
+  await page.getByRole('textbox', { name: '加载器实例名称', exact: true }).fill('1.20.1');
+  const beforeLoaderConflict = await rpc('task');
+  const beforeLoaderConfig = (await rpc('snapshot')).config;
+  await page.getByRole('button', { name: '安装 Fabric', exact: true }).click();
+  await expect(page.locator('.error-banner')).toContainText('同名实例已存在');
+  assert.equal((await rpc('task')).id, beforeLoaderConflict.id);
+  assert.deepEqual((await rpc('snapshot')).config, beforeLoaderConfig);
+  await page.screenshot({ path: join(output, 'loader-name-conflict.png') });
+  await page.getByRole('button', { name: '返回游戏列表', exact: true }).click();
   const pack = await modpackFixture(fixture);
   const globalIsolation = (await rpc('snapshot')).config.isolated;
   await page.getByRole('button', { name: '整合包', exact: true }).click();
@@ -915,6 +945,7 @@ try {
           'instance context menu keyboard navigation and focus restoration',
           'duplicate defaults to no saved worlds; opt-in copies exact world bytes',
           'duplicate and rename preserve settings, favorites, original files and dependent inheritance',
+          'renamed instances retain Minecraft identity; loader alias conflicts fail before a worker or network call',
           'invalid and conflicting instance names leave dialog open and never overwrite',
           'custom switch interaction and pseudo-element motion honor reduced animation settings',
         ],
