@@ -110,6 +110,7 @@ try {
     .toBeLessThan(2);
   await page.screenshot({ path: join(output, 'launch-diagnosis-light.png'), fullPage: true });
   await page.evaluate(() => document.querySelector('.launcher').classList.add('dark'));
+  await expect(page.locator('.toolbar > button')).toHaveCSS('background-color', 'rgb(23, 38, 45)');
   await page.screenshot({ path: join(output, 'launch-diagnosis-dark.png'), fullPage: true });
   await page.setViewportSize({ width: 800, height: 560 });
   assert.equal(
