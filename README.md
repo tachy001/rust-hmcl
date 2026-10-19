@@ -6,7 +6,7 @@
 
 ## 使用
 
-Windows 发布目录为 `dist/aster-windows-x64/`。解压完整 ZIP 后运行 `AsterLauncher.exe`，请保留同目录的 `WebView2Loader.dll`。Windows 需要 WebView2 Runtime。
+Windows 预览版见 [Releases](https://github.com/tachy001/rust-hmcl/releases)。下载 `AsterLauncher.exe` 可单独运行，完整 ZIP 另附说明与许可证。WebView2 加载器已静态链接，无需外置 DLL；Windows 仍需要系统 WebView2 Runtime。本机单文件发行目录为 `dist/aster-windows-x64-single-exe/`。
 
 1. 在侧栏底部的账户入口添加离线用户名。
 2. 在“下载”选择 Minecraft 版本并安装。
@@ -20,6 +20,8 @@ Windows 发布目录为 `dist/aster-windows-x64/`。解压完整 ZIP 后运行 `
 本地导入：在模组管理选择或拖入 `.jar`，在资源包管理选择或拖入 ZIP／资源包文件夹。检查待导入列表后提交；源文件保留，同名内容拒绝覆盖，资源包不会自动启用。详见 [本地导入说明](docs/LOCAL-IMPORTS.md)。
 
 整合包：在侧栏选择 `.mrpack`，先预览游戏版本、加载器和文件数量，再命名安装。支持原版、Fabric、Quilt，可选择是否安装可选客户端文件，新实例使用独立目录。详见 [整合包说明](docs/MODPACKS.md)。
+
+日志：支持级别与关键词筛选、暂停／继续跟随和任务报告导出。启动失败会保留原始错误，并对明确日志线索提供 Java、实例设置、模组或文件校验入口。详见 [启动诊断与日志说明](docs/LAUNCH-DIAGNOSTICS.md)。
 
 Microsoft 登录、第三方认证、Forge／NeoForge 以及部分旧界面功能仍待实现或迁移。离线账户不能进入正版认证服务器。自动验证使用隔离的手工样本，不代表已经完成真实游戏端到端验收。
 

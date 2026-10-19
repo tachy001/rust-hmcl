@@ -22,6 +22,7 @@ await mkdir(output, { recursive: true });
 const fixture = await mkdtemp(join(root, '..', '.tools', 'web-ui-proof-'));
 const imports = await localImportFixtures(fixture);
 const pickerSelections = [];
+const reportDestinations = [];
 const version = join(fixture, 'minecraft', 'versions', '1.20.1');
 const game = join(version, 'game');
 await mkdir(join(game, 'resourcepacks', 'Demo Pack'), { recursive: true });
@@ -143,6 +144,15 @@ try {
     reducedMotion: 'no-preference',
   });
   await context.exposeBinding('__hmclInvoke', async (_source, command, args) => {
+    // Model only the system save dialog. Report content still comes from the real Service.
+    if (command === 'export_task_report') {
+      const report = await rpc('task_report', { task_id: args.taskId });
+      const path = reportDestinations.shift();
+      if (!path) return null;
+      await writeFile(path, report, 'utf8');
+      return path;
+    }
+    if (command === 'task_report') return rpc('task_report', { task_id: args.taskId });
     if (command === 'pick_import') {
       const selection = pickerSelections.shift();
       if (!selection) return [];
@@ -584,7 +594,33 @@ try {
     .toBe(true);
   await expect(page.getByRole('alert')).toBeVisible();
   assert.equal((await rpc('snapshot')).instances.length, 1);
-  await page.getByRole('button', { name: '关闭提示', exact: true }).click();
+  await page.getByRole('button', { name: '查看任务日志', exact: true }).click();
+  await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
+  await expect(page.locator('.launch-diagnosis')).toContainText('任务错误');
+  await expect(page.locator('.console-output')).toContainText('暂无游戏输出');
+  await page.getByRole('button', { name: '导出任务报告', exact: true }).click();
+  await expect(page.locator('.console-export-status')).toHaveText('已取消保存');
+  const reportPath = join(fixture, 'exported-task-report.txt');
+  reportDestinations.push(reportPath);
+  await page.getByRole('button', { name: '导出任务报告', exact: true }).click();
+  await expect(page.locator('.console-export-status')).toContainText('已保存');
+  const failedTask = await rpc('task');
+  const report = await readFile(reportPath, 'utf8');
+  assert.ok(report.includes(failedTask.error));
+  assert.ok(report.includes('最多 500 行'));
+  await assert.rejects(rpc('task_report', { task_id: failedTask.id - 1 }));
+  await page.getByRole('button', { name: '跟随输出', exact: true }).click();
+  await expect(page.getByRole('button', { name: '继续跟随', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await page.getByRole('button', { name: '继续跟随', exact: true }).click();
+  await page.getByRole('searchbox', { name: '搜索日志', exact: true }).fill('<script>');
+  await expect(page.locator('.console-output')).toContainText('暂无游戏输出');
+  await page.screenshot({ path: join(output, 'task-console-dark.png') });
+  await page.getByRole('button', { name: '游戏库', exact: true }).click();
+  await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
+  await expect(page.locator('.error-banner')).toHaveCount(0);
   let beforeCopy = await rpc('snapshot');
   await rpc('update_config', {
     config: {
@@ -875,6 +911,7 @@ try {
           '800px layout',
           'reduced motion persists and removes transition duration',
           'failed background task clears busy state and displays error',
+          'task console displays real failures, exports real Service reports through modeled save/cancel and rejects stale IDs',
           'instance context menu keyboard navigation and focus restoration',
           'duplicate defaults to no saved worlds; opt-in copies exact world bytes',
           'duplicate and rename preserve settings, favorites, original files and dependent inheritance',

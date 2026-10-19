@@ -10,6 +10,7 @@ import ModLibrary from './ModLibrary.vue';
 import LocalImport from './LocalImport.vue';
 import PackInstaller from './PackInstaller.vue';
 import JavaManager from './JavaManager.vue';
+import LaunchConsole from './LaunchConsole.vue';
 import InstanceSettings from './InstanceSettings.vue';
 import {
   api,
@@ -45,6 +46,8 @@ const data = ref<Snapshot | null>(null),
   menu = ref(false);
 const task = ref<Task>({
   id: 0,
+  launch_id: null,
+  clues: [],
   running: false,
   game_running: false,
   progress: 0,
@@ -237,6 +240,27 @@ function ripple(event: PointerEvent) {
 async function inspect(id: string) {
   if (await select(id)) {
     tab.value = 'settings';
+    go('instance');
+  }
+}
+async function recoverLaunch(action: string) {
+  const id = task.value.launch_id;
+  if (action === 'java') {
+    go('java');
+    return;
+  }
+  if (!id || task.value.running || !data.value?.instances.some((item) => item.id === id)) return;
+  if (action === 'repair') {
+    dialog.value = {
+      title: '校验并补全游戏文件',
+      message: `将校验 ${id} 的游戏本体与依赖并下载缺失文件。此操作不会自动停用模组或修改游戏设置。`,
+      confirm: async () => {
+        await start({ kind: 'repair', id });
+      },
+    };
+  } else {
+    if (!(await select(id))) return;
+    tab.value = action === 'mods' ? 'mods' : 'settings';
     go('instance');
   }
 }
@@ -613,6 +637,8 @@ onUnmounted(() => {
       <main class="content" :class="{ home: page === 'home' }">
         <div v-if="error" class="error-banner" role="alert">
           <Icon name="error" /><span>{{ error }}</span
+          ><button v-if="task.error && error === task.error && page !== 'logs'" @click="go('logs')">
+            查看任务日志</button
           ><button aria-label="关闭提示" @click="error = ''">×</button>
         </div>
         <Transition
@@ -968,10 +994,12 @@ onUnmounted(() => {
                 <p v-if="!packs.length && !loading" class="empty">没有资源包</p></template
               >
             </template>
-            <template v-else-if="page === 'logs'"
-              ><h1>日志</h1>
-              <pre class="log-view">{{ task.logs.join('\n') || '暂无游戏输出' }}</pre>
-            </template>
+            <LaunchConsole
+              v-else-if="page === 'logs'"
+              :task="task"
+              :recoverable="!!data?.instances.some((item) => item.id === task.launch_id)"
+              @recover="recoverLaunch"
+            />
             <template v-else-if="page === 'about'"
               ><div class="about">
                 <BrandMark />

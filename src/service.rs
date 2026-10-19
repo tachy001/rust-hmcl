@@ -33,6 +33,8 @@ pub struct Snapshot {
 #[derive(Clone, Default, Serialize)]
 pub struct Task {
     pub id: u64,
+    pub launch_id: Option<String>,
+    pub clues: Vec<crate::diagnostics::Clue>,
     pub running: bool,
     pub game_running: bool,
     pub progress: f32,
@@ -343,6 +345,33 @@ impl Service {
     pub fn cancel(&self) {
         self.cancel.store(true, Ordering::SeqCst);
     }
+    pub fn task_report(&self, task_id: u64) -> Result<String> {
+        let task = self.task()?;
+        if task.id == 0 || task.id != task_id {
+            bail!("任务已变化，请重新打开当前日志后导出");
+        }
+        let mut report = format!(
+            "星屿 Aster · 任务报告\n任务编号：{}\n状态：{}\n实例：{}\n\n",
+            task.id,
+            task.status,
+            task.launch_id.as_deref().unwrap_or("非游戏启动任务")
+        );
+        if let Some(error) = &task.error {
+            report.push_str(&format!("错误：{error}\n\n"));
+        }
+        for clue in &task.clues {
+            report.push_str(&format!(
+                "日志线索：{}\n依据：{}\n建议：{}\n\n",
+                clue.title, clue.evidence, clue.suggestion
+            ));
+        }
+        report.push_str("最近保留的输出（最多 500 行，不等同于完整游戏日志）：\n");
+        for line in &task.logs {
+            report.push_str(line);
+            report.push('\n');
+        }
+        Ok(report)
+    }
     pub fn start(&self, job: Job) -> Result<u64> {
         let mut task = self
             .task
@@ -400,6 +429,10 @@ impl Service {
         let id = task.id + 1;
         *task = Task {
             id,
+            launch_id: match &job {
+                Job::Launch { id } => Some(id.clone()),
+                _ => None,
+            },
             running: true,
             status: "正在准备任务…".into(),
             ..Default::default()
@@ -537,6 +570,13 @@ impl Service {
             task.running = false;
             task.game_running = false;
             task.error = result.err().map(|error| format!("{error:#}"));
+            if task.launch_id.is_some() {
+                task.clues = task
+                    .error
+                    .as_deref()
+                    .map(|error| crate::diagnostics::launch_clues(error, &task.logs))
+                    .unwrap_or_default();
+            }
             task.status = if self.cancel.load(Ordering::SeqCst) {
                 "任务已停止"
             } else if task.error.is_some() {
@@ -553,6 +593,67 @@ impl Service {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failed_launch_keeps_attempted_instance_without_executing_java() {
+        let game_dir = std::env::temp_dir().join(format!(
+            "aster-missing-game-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        assert!(!game_dir.exists());
+        let service = Service::new(Config {
+            game_dir: game_dir.to_string_lossy().into_owned(),
+            selected: "Original".into(),
+            ..Default::default()
+        });
+        let task_id = service
+            .start(Job::Launch {
+                id: "Attempted".into(),
+            })
+            .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            let task = service.task().unwrap();
+            if !task.running {
+                assert_eq!(task.id, task_id);
+                assert_eq!(task.launch_id.as_deref(), Some("Attempted"));
+                assert!(task.error.as_deref().unwrap().contains("游戏目录不存在"));
+                assert!(task.clues.is_empty());
+                assert!(!task.game_running);
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(service.config().unwrap().selected, "Original");
+        assert!(!game_dir.exists());
+    }
+    #[test]
+    fn reports_preserve_task_context_and_reject_stale_requests() {
+        let service = Service::new(Config::default());
+        assert!(service.task_report(0).is_err());
+        let mut task = service.task.lock().unwrap();
+        task.id = 7;
+        task.launch_id = Some("Test Instance".into());
+        task.error =
+            Some("Could not find or load main class net.minecraft.client.main.Main".into());
+        task.logs = vec![
+            "[main/INFO] retained output".into(),
+            "<script>plain text</script>".into(),
+        ];
+        task.clues = crate::diagnostics::launch_clues(task.error.as_deref().unwrap(), &task.logs);
+        drop(task);
+        let report = service.task_report(7).unwrap();
+        assert!(report.contains("实例：Test Instance"));
+        assert!(report.contains("游戏主类未能加载"));
+        assert!(report.contains("<script>plain text</script>"));
+        assert!(report.contains("最多 500 行"));
+        assert!(service.task_report(6).is_err());
+        assert!(service.task_report(8).is_err());
+    }
     #[test]
     fn failed_java_registration_does_not_mutate_configuration() {
         let service = Service::new(Config::default());

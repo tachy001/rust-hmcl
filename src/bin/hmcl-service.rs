@@ -15,6 +15,9 @@ enum Request {
         path: String,
     },
     Task,
+    TaskReport {
+        task_id: u64,
+    },
     Versions,
     Runtimes,
     RegisterJava {
@@ -50,6 +53,7 @@ fn execute(service: &Service, request: Request) -> anyhow::Result<Value> {
         Request::Snapshot => serde_json::to_value(service.snapshot()?)?,
         Request::InspectModpack { path } => serde_json::to_value(service.inspect_modpack(&path)?)?,
         Request::Task => serde_json::to_value(service.task()?)?,
+        Request::TaskReport { task_id } => serde_json::to_value(service.task_report(task_id)?)?,
         Request::Versions => serde_json::to_value(service.versions()?)?,
         Request::Runtimes => serde_json::to_value(service.runtimes()?)?,
         Request::RegisterJava { path } => serde_json::to_value(service.register_java(&path)?)?,

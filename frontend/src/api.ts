@@ -47,6 +47,8 @@ export interface Snapshot {
 }
 export interface Task {
   id: number;
+  launch_id: string | null;
+  clues: { title: string; evidence: string; suggestion: string; action: string }[];
   running: boolean;
   game_running: boolean;
   progress: number;
@@ -127,6 +129,8 @@ export const api = {
   snapshot: () => invoke<Snapshot>('snapshot'),
   save: (config: Config) => invoke<Snapshot>('update_config', { config }),
   task: () => invoke<Task>('task'),
+  taskReport: (taskId: number) => invoke<string>('task_report', { taskId }),
+  exportTaskReport: (taskId: number) => invoke<string | null>('export_task_report', { taskId }),
   start: (job: Job) => invoke<number>('start_job', { job }),
   cancel: () => invoke<void>('cancel_job'),
   versions: () => invoke<Version[]>('versions'),

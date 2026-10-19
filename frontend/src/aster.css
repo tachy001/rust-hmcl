@@ -916,6 +916,222 @@ select:focus {
     transform: rotate(1turn);
   }
 }
+.launch-console .toolbar h1 {
+  margin-bottom: 0;
+}
+.launch-console .toolbar > div {
+  flex: 1;
+}
+.console-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  margin: 18px 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(115deg, var(--surface), var(--field));
+}
+.console-signal {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--primary);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.console-signal.live {
+  animation: starlight 2s ease-in-out infinite;
+}
+.console-summary b {
+  font-size: 13px;
+}
+.console-summary p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.console-state {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.console-summary.failed .console-signal {
+  color: #cc7770;
+}
+.launch-diagnosis {
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.console-error {
+  font-size: 11px;
+  color: #c76861;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.diagnosis-clue {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  align-items: start;
+}
+.diagnosis-clue > .icon {
+  color: var(--primary);
+  margin-top: 2px;
+}
+.diagnosis-clue h3 {
+  margin: 0 0 7px;
+  font-size: 12px;
+}
+.diagnosis-clue code {
+  display: block;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.diagnosis-clue p {
+  margin: 7px 0 0;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.diagnosis-clue button {
+  font-size: 10px;
+  gap: 6px;
+}
+.diagnosis-note,
+.console-footnote {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.8;
+}
+.console-tools {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.console-search {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 180px;
+  gap: 8px;
+  padding-left: 10px;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.console-search:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.launch-console .console-search input {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+}
+.console-follow[aria-pressed='true'] {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.console-counts {
+  display: flex;
+  justify-content: space-between;
+  margin: 12px 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.console-output {
+  background: #0e2029;
+  border: 1px solid #31505a;
+  color: #d0dfdc;
+  border-radius: 12px;
+  padding: 12px 0;
+  min-height: 180px;
+  height: clamp(180px, 35vh, 420px);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.console-output:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.console-line {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+  padding: 2px 14px 2px 0;
+  font:
+    11px/1.7 Consolas,
+    'SFMono-Regular',
+    monospace;
+}
+.console-line > span {
+  text-align: right;
+  color: #698387;
+  user-select: none;
+}
+.console-line code {
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.console-line.error {
+  color: #f4aca5;
+  background: #ee72610c;
+}
+.console-line.warn {
+  color: #e2ce98;
+}
+.console-empty {
+  text-align: center;
+  color: #8aa5a7;
+  font-size: 11px;
+  padding: 38px 20px;
+}
+.console-export-status {
+  color: var(--primary);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.reduced .console-signal {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-signal {
+    animation: none;
+  }
+}
+@media (max-width: 950px) {
+  .diagnosis-clue {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+  .diagnosis-clue button {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .console-state {
+    display: none;
+  }
+  .launch-console .toolbar {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
 /* Stop ambient timelines completely, including pseudo-elements, when motion is reduced. */
 .reduced .dashboard *,
 .reduced .dashboard *::before,

@@ -34,6 +34,36 @@ async fn task(service: State<'_, Service>) -> Result<Task, String> {
     blocking(move || service.task()).await
 }
 #[tauri::command]
+async fn task_report(task_id: u64, service: State<'_, Service>) -> Result<String, String> {
+    let service = service.inner().clone();
+    blocking(move || service.task_report(task_id)).await
+}
+#[tauri::command]
+async fn export_task_report(
+    task_id: u64,
+    service: State<'_, Service>,
+) -> Result<Option<String>, String> {
+    let service = service.inner().clone();
+    blocking(move || {
+        let text = service.task_report(task_id)?;
+        anyhow::ensure!(
+            !std::env::args().any(|argument| argument == "--verify-hidden-ui"),
+            "隐藏验证模式不打开保存对话框"
+        );
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("保存任务报告")
+            .set_file_name(format!("Aster-task-{task_id}.txt"))
+            .add_filter("文本报告", &["txt"])
+            .save_file()
+        else {
+            return Ok(None);
+        };
+        std::fs::write(&path, text)?;
+        Ok(Some(path.to_string_lossy().into_owned()))
+    })
+    .await
+}
+#[tauri::command]
 async fn start_job(job: Job, service: State<'_, Service>) -> Result<u64, String> {
     let service = service.inner().clone();
     blocking(move || service.start(job)).await
@@ -236,6 +266,8 @@ fn main() {
             snapshot,
             update_config,
             task,
+            task_report,
+            export_task_report,
             start_job,
             cancel_job,
             versions,

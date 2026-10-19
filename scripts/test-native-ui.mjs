@@ -425,6 +425,30 @@ try {
     path: join(output, 'native-modpack-installed.png'),
     omitBackground: true,
   });
+  // A missing metadata file fails before Java discovery or any download/process start.
+  const failedLaunchId = 'never-installed-native-launch';
+  await assert.rejects(stat(join(fixture, 'minecraft', 'versions', failedLaunchId)));
+  const failureTaskId = await invoke('start_job', { job: { kind: 'launch', id: failedLaunchId } });
+  await expect
+    .poll(async () => {
+      const task = await invoke('task');
+      return task.id === failureTaskId && !task.running && !!task.error;
+    })
+    .toBe(true);
+  const failureTask = await invoke('task');
+  assert.equal(failureTask.launch_id, failedLaunchId);
+  assert.deepEqual(failureTask.clues, []);
+  const report = await invoke('task_report', { taskId: failureTaskId });
+  assert.ok(report.includes(failedLaunchId));
+  assert.ok(report.includes(failureTask.error));
+  await assert.rejects(invoke('task_report', { taskId: failureTaskId - 1 }));
+  await page.getByRole('button', { name: '日志', exact: true }).click();
+  await expect(page.locator('.launch-diagnosis')).toContainText('暂未识别出明确线索');
+  await page.getByRole('button', { name: '导出任务报告', exact: true }).click();
+  await expect(page.locator('.launch-console [role="alert"]')).toContainText(
+    '隐藏验证模式不打开保存对话框',
+  );
+  await page.screenshot({ path: join(output, 'native-launch-console.png'), omitBackground: true });
   assert.deepEqual(errors, []);
   const proof = {
     executable,
@@ -465,6 +489,7 @@ try {
       'mrpack preview and cached native installation with isolated config and client overrides',
       'resource compatibility confirmation before options write',
       'native background copy task and completion refresh',
+      'failed launch retains instance context, reports use native IPC and stale IDs are rejected without opening a save dialog',
     ],
     limitations: [
       'Windows only',
