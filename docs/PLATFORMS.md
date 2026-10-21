@@ -30,4 +30,6 @@ Debian / Ubuntu 可用 `sudo apt install ./aster-launcher-linux-x64-<版本>.deb
 
 `npm run test:platform` 可对 `HMCL_DESKTOP_BIN` 指定的生产构建运行独立配置检查；`npm run package:platform` 在干净源码树上打包，要求待分发程序与原生检查记录的 SHA-256 一致。各平台产物及校验和保存在 `dist/distributions`，流水线提供 `aster-distribution-*` 和 `platform-proof-*` 下载。
 
+Linux 打包器会移除调试符号，因此先将 `.deb` 解包到 `.tools/deb-native`，对其中的实际程序执行原生检查；便携包也使用这个已测试的程序。macOS 检查应用包内的签名后程序，Windows 检查最终 MSVC EXE。
+
 测试记录才代表对应提交的实际结果。编译成功不等于图形界面实测；隐藏窗口检查也不覆盖可见合成效果、实体输入、游戏渲染、游戏启动或账号认证。这仍是开发预览版，GitHub 已发布版本不会因源码更新自动替换。

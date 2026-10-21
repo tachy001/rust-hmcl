@@ -45,7 +45,9 @@ jobs:
           elif [ "$RUNNER_OS" = Windows ]; then
             echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/target/release/rust-hmcl-desktop.exe" >> "$GITHUB_ENV"
           else
-            echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/target/release/rust-hmcl-desktop" >> "$GITHUB_ENV"
+            mkdir -p "$GITHUB_WORKSPACE/.tools/deb-native"
+            dpkg-deb -x target/release/bundle/deb/*.deb "$GITHUB_WORKSPACE/.tools/deb-native"
+            echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/.tools/deb-native/usr/bin/rust-hmcl-desktop" >> "$GITHUB_ENV"
           fi
       - if: runner.os == 'Windows'
         run: node scripts/verify-windows-exe.mjs target/release/rust-hmcl-desktop.exe

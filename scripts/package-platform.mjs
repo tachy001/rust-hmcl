@@ -57,7 +57,7 @@ if (process.platform === 'win32') {
   const binary =
     process.platform === 'darwin'
       ? join(app, 'Contents/MacOS/rust-hmcl-desktop')
-      : join(root, 'target/release/rust-hmcl-desktop');
+      : join(root, '.tools/deb-native/usr/bin/rust-hmcl-desktop');
   const proof = JSON.parse(
     await readFile(
       join(root, 'dist/platform-ui-proof', `${process.platform}-${process.arch}`, 'proof.json'),
