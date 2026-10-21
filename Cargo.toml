@@ -1,6 +1,6 @@
 [package]
 name = "rust-hmcl"
-version = "0.3.11"
+version = "0.3.14"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "A native Rust Minecraft launcher inspired by HMCL"
