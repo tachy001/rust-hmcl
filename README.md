@@ -27,7 +27,9 @@ Windows 预览版见 [Releases](https://github.com/tachy001/rust-hmcl/releases)�
 
 Forge 的无界面官方安装器、生成产物修复和验证范围见 [Forge 安装说明](docs/FORGE-INSTALLATION.md)。
 
-Microsoft 登录、第三方认证、旧版 Forge、NeoForge 以及部分旧界面功能仍待实现或迁移。离线账户不能进入正版认证服务器。普通界面验证使用手工样本，另有实际下载和安装检查，均不代表真实游戏端到端验收。
+NeoForge 已提供后端版本查询、安装、修复和模组接口，界面安装入口待接入，见 [NeoForge 后端说明](docs/NEOFORGE-INSTALLATION.md)。
+
+Microsoft 登录、第三方认证、旧版 Forge 以及部分旧界面功能仍待实现或迁移。离线账户不能进入正版认证服务器。普通界面验证使用手工样本，另有实际下载和安装检查，均不代表真实游戏端到端验收。
 
 ## 开发
 

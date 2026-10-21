@@ -22,7 +22,7 @@ Java 管理支持添加已有可执行文件、设为默认和隐藏／恢复；
 
 Forge：自动安装支持使用 Java 17 及以上的现代安装器，可填写具体版本或使用官方推荐版。需要游戏所需的 Java，可按自动下载设置获取。安装在独立副本中完成；游戏库校验可重建损坏的 Forge 产物。
 
-目前支持离线账户；Microsoft 登录、第三方认证、旧版 Forge 及 NeoForge 尚未提供，整合包入口尚不接受 Forge 依赖。
+目前支持离线账户；Microsoft 登录、第三方认证、旧版 Forge 尚未提供，NeoForge 暂无界面安装入口，整合包入口尚不接受 Forge／NeoForge 依赖。
 
 源代码与反馈：https://github.com/tachy001/rust-hmcl
 

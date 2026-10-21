@@ -1,5 +1,7 @@
 # 未发布
 
+- 后端抽出 OfficialInstaller 与 InstallerFamily 对象，Forge 旧入口委托共用安装器；新增 NeoForge 官方版本查询、隔离安装、修复、取消、实例识别和兼容模组接口。
+- 实际验证 Minecraft 1.20.4／NeoForge 20.4.251 的 90 个产物、损坏修复、取消和 JEI 下载；前端仅扩展类型、图标映射与修复提示，暂不新增安装入口。
 - 后端新增独立 LoaderCatalog 对象和 CatalogSource 接口，统一 Fabric／Quilt／Forge 版本列表与推荐规则；修复 Quilt 默认选取旧测试版的问题。
 - 新增只读 loader_versions 接口，保留改名实例的 Minecraft 身份；Fabric／Quilt 安装命令支持可选指定版本，旧请求仍可使用默认版本。
 - 关闭页面与输入框中的 WebView 浏览器右键菜单，保留游戏库自定义菜单与键盘文本编辑。

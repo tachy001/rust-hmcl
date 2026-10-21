@@ -263,7 +263,7 @@ async function recoverLaunch(action: string) {
   if (action === 'repair') {
     dialog.value = {
       title: '校验并补全游戏文件',
-      message: `将校验 ${id} 的游戏本体与依赖并下载缺失文件。${task.value.clues.some((clue) => clue.title === 'Forge 安装产物需要修复') ? 'Forge 依赖会使用 Java 和官方安装器在独立副本中重建。' : ''}此操作不会自动停用模组或修改游戏设置。`,
+      message: `将校验 ${id} 的游戏本体与依赖并下载缺失文件。${task.value.clues.some((clue) => clue.title.endsWith('安装产物需要修复')) ? '加载器依赖会使用 Java 和官方安装器在独立副本中重建。' : ''}此操作不会自动停用模组或修改游戏设置。`,
       confirm: async () => {
         await start({ kind: 'repair', id });
       },

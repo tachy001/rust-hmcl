@@ -62,7 +62,7 @@ export interface Version {
   url: string;
   sha1: string;
 }
-export type LoaderKind = 'fabric' | 'quilt' | 'forge';
+export type LoaderKind = 'fabric' | 'quilt' | 'forge' | 'neoforge';
 export interface LoaderVersions {
   instance_id: string;
   minecraft: string;
@@ -157,4 +157,4 @@ export const api = {
 };
 export const desktopAvailable = () => '__TAURI_INTERNALS__' in window;
 export const instanceIcon = (icon: string) =>
-  icon === 'forge' ? '/aster/forge.svg' : `/hmcl/${icon}.png`;
+  icon === 'forge' || icon === 'neoforge' ? '/aster/forge.svg' : `/hmcl/${icon}.png`;

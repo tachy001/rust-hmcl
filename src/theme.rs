@@ -361,7 +361,7 @@ pub fn icon(ui: &egui::Ui, name: &str, rect: Rect, color: Color32) {
         return;
     }
     let bytes: &'static [u8] = match name {
-        "forge" => include_bytes!("../assets/aster/forge.svg"),
+        "forge" | "neoforge" => include_bytes!("../assets/aster/forge.svg"),
         "home" => include_bytes!("../assets/hmcl/icons/home.svg"),
         "person" => include_bytes!("../assets/hmcl/icons/person.svg"),
         "game" => include_bytes!("../assets/hmcl/icons/stadia_controller.svg"),

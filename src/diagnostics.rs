@@ -12,9 +12,9 @@ pub struct Clue {
 pub fn launch_clues(error: &str, logs: &[String]) -> Vec<Clue> {
     let rules: &[(&str, &[&str], &str, &str)] = &[
         (
-            "Forge 安装产物需要修复",
+            "加载器安装产物需要修复",
             &["Forge 安装产物缺失或损坏"],
-            "校验该实例，在独立副本中重新执行官方 Forge 安装器以重建依赖；需要 Java。",
+            "校验该实例，在独立副本中重新执行该加载器的官方安装器以重建依赖；需要 Java。",
             "repair",
         ),
         (

@@ -15,6 +15,7 @@ pub mod metadata;
 pub mod modpack;
 pub mod modrinth;
 pub mod mods;
+pub mod official_installer;
 pub mod resourcepacks;
 pub mod service;
 pub use config::Config;

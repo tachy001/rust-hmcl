@@ -165,6 +165,10 @@ try {
   );
   assert.equal((await invoke('task')).id, beforeLoaderAlias.id);
   await assert.rejects(
+    invoke('start_job', { job: { kind: 'neoforge', id: 'native-fixture', version: '../bad' } }),
+    (error) => String(error).includes('NeoForge 版本应为'),
+  );
+  await assert.rejects(
     invoke('start_job', { job: { kind: 'forge', id: 'native-fixture', name: 'native-fixture' } }),
   );
   await assert.rejects(
@@ -294,7 +298,9 @@ try {
   await page.getByRole('button', { name: '清空筛选', exact: true }).click();
   await page.getByRole('button', { name: '发现模组', exact: true }).click();
   await expect(page.getByText('此实例暂不能在线安装模组', { exact: true })).toBeVisible();
-  await expect(page.locator('.mod-notice')).toContainText('请先选择 Fabric、Quilt 或 Forge');
+  await expect(page.locator('.mod-notice')).toContainText(
+    '请先选择 Fabric、Quilt、Forge 或 NeoForge',
+  );
   const fabricEnvironment = join(fixture, 'minecraft', 'versions', 'native-fabric');
   await mkdir(fabricEnvironment, { recursive: true });
   await writeFile(
@@ -336,7 +342,7 @@ try {
       return String(error);
     }
   });
-  assert.match(invalidSearch, /请先选择 Fabric、Quilt 或 Forge/);
+  assert.match(invalidSearch, /请先选择 Fabric、Quilt、Forge 或 NeoForge/);
   await settle();
   await page.screenshot({ path: join(output, 'native-mod-discovery.png'), omitBackground: true });
   const invalidMod = await page.evaluate(async () => {
@@ -534,6 +540,7 @@ try {
       'snapshot IPC',
       'loader name conflict is rejected before starting a native worker',
       'Forge rejects invalid inputs before executing Java and the bundled original anvil icon renders',
+      'NeoForge installation rejects invalid versions before starting a worker or Java',
       'loader catalog IPC rejects invalid instance paths before network access',
       'invalid configuration does not write',
       'traversal rejected before game start',

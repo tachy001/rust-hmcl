@@ -31,6 +31,7 @@ Forge 从官方完整列表取版本，采用官方 recommended／latest；不�
 ## 前端接入契约
 
 Tauri：`api.loaderVersions(instanceId, 'fabric' | 'quilt' | 'forge')`。
+现在也支持 `'neoforge'`，安装器对象与边界见 [NeoForge 后端说明](NEOFORGE-INSTALLATION.md)。
 JSON-lines：
 
 ```json
@@ -43,7 +44,7 @@ JSON-lines：
 | --- | --- |
 | `instance_id` | 本次查询的本地实例名称，与全局已选实例分开 |
 | `minecraft` | 解析得到的真实 Minecraft 版本，改名后的实例仍保持原版本 |
-| `loader` | `fabric`、`quilt` 或 `forge` |
+| `loader` | `fabric`、`quilt`、`forge` 或 `neoforge` |
 | `install_supported` | 当前安装入口是否通过基本适用性检查；不代表每个远端安装包已经验证 |
 | `reason` | 无版本或安装入口不支持时的原因，否则为 null |
 | `versions` | 按版本号从新到旧的数组；每项含 version、stable、recommended、latest |

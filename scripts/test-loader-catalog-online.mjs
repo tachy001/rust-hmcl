@@ -34,7 +34,7 @@ class BackendSession {
   request(method, args = {}) {
     assert.ok(['loader_versions', 'snapshot', 'task', 'start_job'].includes(method));
     if (method === 'start_job') {
-      assert.ok(['fabric', 'quilt'].includes(args.job.kind));
+      assert.ok(['fabric', 'quilt', 'neoforge'].includes(args.job.kind));
       assert.equal(args.job.version, '../bad'); // Guaranteed preflight rejection, never an installation.
     }
     return new Promise((resolve, reject) => {
@@ -73,6 +73,20 @@ const configPath = join(fixture, 'config.json');
 await writeFile(configPath, JSON.stringify({ game_dir: game, selected: id, auto_java: false }));
 const configBefore = await readFile(configPath);
 const profileBefore = await readFile(profilePath);
+const neoId = 'NeoForge Vanilla Alias';
+const neoDir = join(game, 'versions', neoId);
+await mkdir(neoDir);
+const neoProfile = join(neoDir, `${neoId}.json`);
+await writeFile(
+  neoProfile,
+  JSON.stringify({
+    id: neoId,
+    rustHmclGameVersion: '1.20.4',
+    javaVersion: { majorVersion: 17 },
+    libraries: [],
+  }),
+);
+const neoBefore = await readFile(neoProfile);
 const executable = join(fixture, process.platform === 'win32' ? 'service.exe' : 'service');
 await copyFile(
   process.env.HMCL_SERVICE_BIN ??
@@ -130,16 +144,44 @@ try {
       latest: latest[0].version,
     });
   }
+  const neo = await session.request('loader_versions', { id: neoId, loader: 'neoforge' });
+  assert.equal(neo.minecraft, '1.20.4');
+  assert.equal(neo.instance_id, neoId);
+  assert.equal(neo.install_supported, true);
+  const neoRecommended = neo.versions.filter((item) => item.recommended);
+  assert.equal(neoRecommended.length, 1);
+  assert.ok(neo.versions.every((item) => item.version.startsWith('20.4.')));
+  const response = await fetch(
+    'https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge',
+    { signal: AbortSignal.timeout(30000) },
+  );
+  assert.equal(response.status, 200);
+  const officialNeo = (await response.json()).versions.filter(
+    (v) => v.startsWith('20.4.') && !v.endsWith('-beta'),
+  );
+  officialNeo.sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
+  assert.equal(neoRecommended[0].version, officialNeo[0]);
+  reports.push({
+    loader: 'neoforge',
+    minecraft: '1.20.4',
+    count: neo.versions.length,
+    recommended: neoRecommended[0].version,
+  });
+  const unsupported = await session.request('loader_versions', { id, loader: 'neoforge' });
+  assert.equal(unsupported.install_supported, false);
+  assert.deepEqual(unsupported.versions, []);
   for (const invalid of ['../escape', 'missing']) {
     await assert.rejects(session.request('loader_versions', { id: invalid, loader: 'fabric' }));
   }
-  for (const kind of ['fabric', 'quilt']) {
+  for (const kind of ['fabric', 'quilt', 'neoforge']) {
     await assert.rejects(session.request('start_job', { job: { kind, id, version: '../bad' } }));
   }
   assert.deepEqual(await session.request('task'), taskBefore);
   assert.equal((await session.request('snapshot')).config.selected, id);
   assert.deepEqual(await readFile(configPath), configBefore);
   assert.deepEqual(await readFile(profilePath), profileBefore);
+  assert.deepEqual(await readFile(neoProfile), neoBefore);
+  assert.deepEqual(await readdir(neoDir), [`${neoId}.json`]);
   assert.deepEqual(await readdir(game), ['versions']);
   assert.deepEqual(await readdir(version), [`${id}.json`]);
   await mkdir(join(root, 'dist'), { recursive: true });

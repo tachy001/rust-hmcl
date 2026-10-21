@@ -78,6 +78,13 @@ pub enum Job {
         #[serde(default)]
         version: Option<String>,
     },
+    Neoforge {
+        id: String,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        version: Option<String>,
+    },
     InstallMod {
         id: String,
         project: String,
@@ -238,13 +245,16 @@ impl Service {
         let versions = LoaderCatalog::new(&worker).releases(minecraft, loader)?;
         let reason = if versions.is_empty() {
             Some("该 Minecraft 版本没有可用加载器".into())
-        } else if loader == LoaderKind::Forge
+        } else if matches!(loader, LoaderKind::Forge | LoaderKind::Neoforge)
             && metadata["javaVersion"]["majorVersion"]
                 .as_u64()
                 .unwrap_or(8)
                 < 17
         {
-            Some("Forge 自动安装目前需要使用 Java 17 及以上的现代游戏版本".into())
+            Some(format!(
+                "{} 自动安装目前需要使用 Java 17 及以上的现代游戏版本",
+                loader.name()
+            ))
         } else {
             None
         };
@@ -447,6 +457,11 @@ impl Service {
             id,
             name: Some(name),
             ..
+        }
+        | Job::Neoforge {
+            id,
+            name: Some(name),
+            ..
         } = &job
         {
             crate::instance_ops::validate_name(name)?;
@@ -506,14 +521,27 @@ impl Service {
                     crate::loader_catalog::validate_component(version)?;
                 }
             }
-            Job::Forge { id, version, .. } => {
+            Job::Forge { id, version, .. } | Job::Neoforge { id, version, .. } => {
+                use crate::official_installer::InstallerFamily;
+                let family = if matches!(job, Job::Neoforge { .. }) {
+                    InstallerFamily::Neoforge
+                } else {
+                    InstallerFamily::Forge
+                };
                 game::version_dir(Path::new(&config.game_dir), id)?;
                 if let Some(version) = version {
-                    crate::forge::validate_version(version)?;
+                    family.kind().validate_version(version)?;
                 }
                 let meta = crate::metadata::resolve(Path::new(&config.game_dir), id)?;
+                family.validate_target(
+                    meta["_gameVersion"].as_str().context("缺少基础游戏版本")?,
+                    version.as_deref(),
+                )?;
                 if meta["javaVersion"]["majorVersion"].as_u64().unwrap_or(8) < 17 {
-                    bail!("Forge 自动安装目前需要使用 Java 17 及以上的现代游戏版本");
+                    bail!(
+                        "{} 自动安装目前需要使用 Java 17 及以上的现代游戏版本",
+                        family.name()
+                    );
                 }
             }
         }
@@ -606,8 +634,11 @@ impl Service {
                 }
                 Job::Repair { id } => {
                     let metadata = crate::metadata::resolve(root, &id)?;
-                    if let Some(version) = metadata["rustHmclForge"]["version"].as_str() {
-                        worker.install_forge(&config, &id, Some(&id), Some(version), true)?;
+                    if let Some((family, version)) =
+                        crate::official_installer::InstallerFamily::recorded(&metadata)?
+                    {
+                        crate::official_installer::OfficialInstaller::new(&worker, family)
+                            .install(&config, &id, Some(&id), Some(version), true)?;
                     } else {
                         worker.prepare(root, &id, &metadata)?;
                     }
@@ -639,8 +670,18 @@ impl Service {
                         name.as_deref(),
                     )?;
                 }
-                Job::Forge { id, name, version } => {
-                    let installed = worker.install_forge(
+                Job::Forge { .. } | Job::Neoforge { .. } => {
+                    use crate::official_installer::{InstallerFamily, OfficialInstaller};
+                    let (family, id, name, version) = match job {
+                        Job::Forge { id, name, version } => {
+                            (InstallerFamily::Forge, id, name, version)
+                        }
+                        Job::Neoforge { id, name, version } => {
+                            (InstallerFamily::Neoforge, id, name, version)
+                        }
+                        _ => unreachable!(),
+                    };
+                    let installed = OfficialInstaller::new(&worker, family).install(
                         &config,
                         &id,
                         name.as_deref(),
@@ -747,7 +788,7 @@ mod tests {
                 version: Some("../bad".into())
             })
             .is_err());
-        for kind in ["fabric", "quilt"] {
+        for kind in ["fabric", "quilt", "neoforge"] {
             let job: Job = serde_json::from_value(serde_json::json!({
                 "kind":kind,"id":"source","version":"../bad"
             }))
@@ -865,6 +906,19 @@ mod tests {
         let environment = service.mod_environment("forge-sample").unwrap();
         assert_eq!(environment.game, "1.20.1");
         assert_eq!(environment.loader, "forge");
+        let neo_base = root.join("versions/1.20.4");
+        std::fs::create_dir(&neo_base).unwrap();
+        std::fs::write(
+            neo_base.join("1.20.4.json"),
+            r#"{"id":"1.20.4","libraries":[]}"#,
+        )
+        .unwrap();
+        let neo = root.join("versions/neo-sample");
+        std::fs::create_dir(&neo).unwrap();
+        std::fs::write(neo.join("neo-sample.json"), r#"{"id":"neo-sample","inheritsFrom":"1.20.4","rustHmclNeoForge":{"version":"20.4.251"},"libraries":[]}"#).unwrap();
+        let environment = service.mod_environment("neo-sample").unwrap();
+        assert_eq!(environment.game, "1.20.4");
+        assert_eq!(environment.loader, "neoforge");
         assert_eq!(
             service
                 .snapshot()

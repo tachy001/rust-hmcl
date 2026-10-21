@@ -31,9 +31,20 @@ fn describe(profile: &Value) -> Description {
         .or_else(|| profile["id"].as_str())
         .unwrap_or("未知版本");
     let libraries = profile["libraries"].as_array();
-    let loader = profile["rustHmclForge"]["version"]
-        .as_str()
-        .map(|version| ("forge", "Forge", version))
+    let neoforge = profile["rustHmclNeoForge"]["version"].as_str().or_else(|| {
+        profile["arguments"]["game"]
+            .as_array()?
+            .windows(2)
+            .find(|args| args[0] == "--fml.neoForgeVersion")?[1]
+            .as_str()
+    });
+    let loader = neoforge
+        .map(|version| ("neoforge", "NeoForge", version))
+        .or_else(|| {
+            profile["rustHmclForge"]["version"]
+                .as_str()
+                .map(|version| ("forge", "Forge", version))
+        })
         .or_else(|| {
             libraries
                 .into_iter()
@@ -79,6 +90,11 @@ mod tests {
     use serde_json::json;
     #[test]
     fn inherited_profiles_show_game_and_loader_instead_of_instance_id() {
+        let neo = describe(
+            &json!({"id":"Neo Alias", "_gameVersion":"1.20.4", "rustHmclNeoForge":{"version":"20.4.251"}, "libraries":[]}),
+        );
+        assert_eq!(neo.icon, "neoforge");
+        assert_eq!(neo.subtitle, "Minecraft 1.20.4 · NeoForge 20.4.251");
         let forge = describe(
             &json!({"id":"Forge Alias","_gameVersion":"1.20.1","libraries":[{"name":"net.minecraftforge:fmlloader:1.20.1-47.4.10"}]}),
         );

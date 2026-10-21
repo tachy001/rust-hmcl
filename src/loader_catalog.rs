@@ -8,6 +8,8 @@ const FORGE_VERSIONS: &str =
     "https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.json";
 const FORGE_PROMOTIONS: &str =
     "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
+const NEOFORGE_VERSIONS: &str =
+    "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -15,9 +17,18 @@ pub enum LoaderKind {
     Fabric,
     Quilt,
     Forge,
+    Neoforge,
 }
 
 impl LoaderKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Fabric => "Fabric",
+            Self::Quilt => "Quilt",
+            Self::Forge => "Forge",
+            Self::Neoforge => "NeoForge",
+        }
+    }
     pub fn validate_version(self, version: &str) -> Result<()> {
         if self == Self::Forge {
             if version.is_empty()
@@ -30,9 +41,34 @@ impl LoaderKind {
                 bail!("Forge 版本只能包含数字、点和连字符");
             }
             Ok(())
+        } else if self == Self::Neoforge {
+            let core = version.strip_suffix("-beta").unwrap_or(version);
+            let parts: Vec<_> = core.split('.').collect();
+            if parts.len() != 3
+                || parts
+                    .iter()
+                    .any(|p| p.is_empty() || !p.bytes().all(|c| c.is_ascii_digit()))
+                || version.len() > 80
+            {
+                bail!("NeoForge 版本应为数字版本号，可带 -beta 后缀");
+            }
+            Ok(())
         } else {
             validate_component(version)
         }
+    }
+
+    pub fn neoforge_prefix(minecraft: &str) -> Option<String> {
+        let parts: Vec<_> = minecraft.split('.').collect();
+        if parts.len() < 2 || parts.len() > 3 || parts[0] != "1" {
+            return None;
+        }
+        let minor = parts[1].parse::<u32>().ok()?;
+        let patch = parts.get(2).unwrap_or(&"0").parse::<u32>().ok()?;
+        if minor < 20 || (minor == 20 && patch < 2) {
+            return None;
+        }
+        Some(format!("{minor}.{patch}."))
     }
 }
 
@@ -97,6 +133,33 @@ impl<'a> LoaderCatalog<'a> {
                     release.stable &= stable;
                 }
                 (releases.into_values().collect::<Vec<_>>(), None, None)
+            }
+            LoaderKind::Neoforge => {
+                let Some(prefix) = LoaderKind::neoforge_prefix(minecraft) else {
+                    return Ok(vec![]);
+                };
+                let data = self.source.fetch_json(NEOFORGE_VERSIONS)?;
+                let mut releases = BTreeMap::<String, LoaderRelease>::new();
+                for value in data["versions"]
+                    .as_array()
+                    .context("NeoForge 版本列表格式错误")?
+                {
+                    let version = value.as_str().context("NeoForge 版本号格式错误")?;
+                    if !version.starts_with(&prefix) {
+                        continue;
+                    }
+                    loader.validate_version(version)?;
+                    releases.insert(
+                        version.into(),
+                        LoaderRelease {
+                            version: version.into(),
+                            stable: !version.ends_with("-beta"),
+                            recommended: false,
+                            latest: false,
+                        },
+                    );
+                }
+                (releases.into_values().collect(), None, None)
             }
             LoaderKind::Forge => {
                 let data = self.source.fetch_json(FORGE_VERSIONS)?;
@@ -301,6 +364,31 @@ mod tests {
             .unwrap()
             .is_empty());
         assert_eq!(absent.urls.borrow().len(), 1);
+    }
+
+    #[test]
+    fn neoforge_filters_the_exact_game_and_prefers_a_stable_release() {
+        let response_source = source(vec![
+            json!({"versions":["20.4.9","20.4.251","20.4.252-beta","20.40.1","21.0.10-beta"]}),
+        ]);
+        let releases = LoaderCatalog::new(&response_source)
+            .releases("1.20.4", LoaderKind::Neoforge)
+            .unwrap();
+        assert_eq!(releases.len(), 3);
+        assert_eq!(releases[0].version, "20.4.252-beta");
+        assert!(releases[0].latest && !releases[0].stable);
+        assert!(releases[1].recommended);
+        assert_eq!(releases[1].version, "20.4.251");
+        assert_eq!(
+            LoaderKind::neoforge_prefix("1.21").as_deref(),
+            Some("21.0.")
+        );
+        let absent = source(vec![]);
+        assert!(LoaderCatalog::new(&absent)
+            .releases("1.20.1", LoaderKind::Neoforge)
+            .unwrap()
+            .is_empty());
+        assert!(absent.urls.borrow().is_empty());
     }
 
     #[test]

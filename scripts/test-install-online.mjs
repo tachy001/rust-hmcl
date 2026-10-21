@@ -2,7 +2,16 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, copyFile, readFile, writeFile, realpath, stat } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  copyFile,
+  readFile,
+  writeFile,
+  realpath,
+  stat,
+  cp,
+} from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, join, sep, delimiter } from 'node:path';
@@ -20,7 +29,25 @@ assert.ok(
     /install-online-proof-[a-z0-9]+$/i.test(fixture),
 );
 const game = join(fixture, 'minecraft');
-const version = '1.20.1';
+const versionIndex = process.argv.indexOf('--minecraft');
+const version = versionIndex < 0 ? '1.20.1' : process.argv[versionIndex + 1];
+assert.match(version, /^\d+\.\d+(?:\.\d+)?$/);
+const seedIndex = process.argv.indexOf('--seed-game-dir');
+if (seedIndex >= 0) {
+  assert.ok(reuse < 0, 'Seed caches only into a fresh verification directory');
+  const seed = await realpath(resolve(process.argv[seedIndex + 1]));
+  assert.ok(
+    seed.startsWith((await realpath(tools)) + sep) &&
+      /install-online-proof-[a-z0-9]+[\\/]minecraft$/i.test(seed),
+  );
+  await mkdir(game, { recursive: true });
+  for (const directory of ['assets', 'libraries'])
+    await cp(join(seed, directory), join(game, directory), {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+    });
+}
 if (reuse < 0)
   await writeFile(
     join(fixture, 'config.json'),

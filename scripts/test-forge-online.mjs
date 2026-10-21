@@ -23,13 +23,19 @@ const value = (flag) => {
   const index = process.argv.indexOf(flag);
   return index < 0 ? null : process.argv[index + 1];
 };
+const neo = process.argv.includes('--neoforge');
+const loader = neo ? 'neoforge' : 'forge';
+const label = neo ? 'NeoForge' : 'Forge';
+const minecraft = neo ? '1.20.4' : '1.20.1';
+const loaderVersion = neo ? '20.4.251' : '47.4.10';
+const recordKey = neo ? 'rustHmclNeoForge' : 'rustHmclForge';
 const reuse = value('--fixture');
 const fixture = reuse
   ? await realpath(resolve(reuse))
-  : await mkdtemp(join(tools, 'forge-online-proof-'));
+  : await mkdtemp(join(tools, `${loader}-online-proof-`));
 assert.ok(
   fixture.startsWith((await realpath(tools)) + sep) &&
-    /^forge-online-proof-[a-z0-9]+$/i.test(basename(fixture)),
+    new RegExp(`^${loader}-online-proof-[a-z0-9]+$`, 'i').test(basename(fixture)),
 );
 if (!reuse) {
   assert.ok(
@@ -100,13 +106,13 @@ createInterface({ input: child.stdout }).on('line', (line) => {
 function rpc(method, args = {}) {
   if (method === 'start_job')
     assert.ok(
-      ['forge', 'repair', 'install_mod'].includes(args.job.kind),
+      [loader, 'repair', 'install_mod'].includes(args.job.kind),
       'This script never launches a game',
     );
   if (method === 'start_job' && args.job.kind === 'install_mod')
     assert.ok(
       args.job.project === 'jei' &&
-        args.job.id === `Forge-Proof-${basename(fixture).split('-').at(-1)}`,
+        args.job.id === `${label}-Proof-${basename(fixture).split('-').at(-1)}`,
     );
   return new Promise((resolve, reject) => {
     pending.push({ resolve, reject });
@@ -138,10 +144,10 @@ async function run(job) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   await rpc('cancel_job');
-  throw new Error('Forge integration deadline exceeded');
+  throw new Error(`${label} integration deadline exceeded`);
 }
 try {
-  console.log(`Isolated Forge fixture: ${fixture}`);
+  console.log(`Isolated ${label} fixture: ${fixture}`);
   const base = 'Online Vanilla Renamed';
   const baseJson = join(game, 'versions', base, `${base}.json`);
   const baseJar = join(game, 'versions', base, `${base}.jar`);
@@ -152,16 +158,17 @@ try {
     if (error.code !== 'ENOENT') throw error;
     return null;
   });
-  const id = `Forge-Proof-${basename(fixture).split('-').at(-1)}`;
+  const id = `${label}-Proof-${basename(fixture).split('-').at(-1)}`;
   const existing = await rpc('snapshot');
   if (!existing.instances.some((item) => item.id === id))
-    await run({ kind: 'forge', id: base, name: id, version: '47.4.10' });
+    await run({ kind: loader, id: base, name: id, version: loaderVersion });
   const path = join(game, 'versions', id, `${id}.json`);
   const profile = JSON.parse(await readFile(path, 'utf8'));
   assert.equal(profile.inheritsFrom, base);
-  assert.equal(profile.rustHmclForge.version, '47.4.10');
-  assert.deepEqual(await rpc('mod_environment', { id }), { game: '1.20.1', loader: 'forge' });
-  assert.ok(profile.rustHmclForge.artifacts.length > 30);
+  const installation = profile[recordKey];
+  assert.equal(installation.version, loaderVersion);
+  assert.deepEqual(await rpc('mod_environment', { id }), { game: minecraft, loader });
+  assert.ok(installation.artifacts.length > 30);
   assert.equal((await rpc('snapshot')).config.version_settings[id].isolated, true);
   const plan = await rpc('launch_plan', { id });
   assert.ok(plan.includes('cpw.mods.bootstraplauncher.BootstrapLauncher'));
@@ -190,18 +197,19 @@ try {
     });
   const [validationCode] = await once(validation, 'exit');
   assert.equal(validationCode, 0, validationOutput);
-  for (const artifact of profile.rustHmclForge.artifacts)
+  for (const artifact of installation.artifacts)
     assert.equal(await digest(join(game, 'libraries', artifact.path)), artifact.sha1);
   const profileBefore = await readFile(path);
   await assert.rejects(
-    rpc('start_job', { job: { kind: 'forge', id: base, name: id, version: '47.4.10' } }),
+    rpc('start_job', { job: { kind: loader, id: base, name: id, version: loaderVersion } }),
   );
   assert.deepEqual(await readFile(path), profileBefore);
   let repaired = false;
   if (process.argv.includes('--repair-corruption')) {
-    const generated = profile.rustHmclForge.artifacts.find(
+    const generated = installation.artifacts.find(
       (item) =>
-        item.path.startsWith('net/minecraftforge/forge/') && item.path.endsWith('-client.jar'),
+        item.path.startsWith(neo ? 'net/neoforged/neoforge/' : 'net/minecraftforge/forge/') &&
+        item.path.endsWith('-client.jar'),
     );
     assert.ok(generated);
     assert.ok(
@@ -231,7 +239,9 @@ try {
     let installerPid;
     while (Date.now() < deadline) {
       const task = await rpc('task');
-      const marker = task.logs.find((line) => /^Forge installer PID: \d+$/.test(line));
+      const marker = task.logs.find((line) =>
+        new RegExp(`^${label} installer PID: \\d+$`).test(line),
+      );
       if (task.id === taskId && task.running && marker) {
         installerPid = Number(marker.split(': ')[1]);
         process.kill(installerPid, 0);
@@ -287,7 +297,7 @@ try {
       });
       assert.equal(response.status, 200);
       const metadata = await response.json();
-      assert.ok(metadata.game_versions.includes('1.20.1') && metadata.loaders.includes('forge'));
+      assert.ok(metadata.game_versions.includes(minecraft) && metadata.loaders.includes(loader));
       const file = metadata.files.find((file) => file.filename === record.filename);
       assert.ok(file);
       assert.equal(await digest(join(mods, file.filename)), file.hashes.sha1);
@@ -299,20 +309,23 @@ try {
     }
   }
   assert.ok(
-    !(await readdir(join(fixture, 'downloads'))).some((name) => name.startsWith('forge-stage-')),
+    !(await readdir(join(fixture, 'downloads'))).some((name) =>
+      name.startsWith(`${loader}-stage-`),
+    ),
   );
   await mkdir(join(root, 'dist'), { recursive: true });
   await writeFile(
-    join(root, 'dist', 'forge-online-proof.json'),
+    join(root, 'dist', `${loader}-online-proof.json`),
     JSON.stringify(
       {
         fixture,
         serviceSha256: await digest(executable, 'sha256'),
         id,
-        forge: '47.4.10',
-        minecraft: '1.20.1',
-        installerSha1: profile.rustHmclForge.installer_sha1,
-        verifiedArtifacts: profile.rustHmclForge.artifacts.length,
+        loader,
+        loaderVersion,
+        minecraft,
+        installerSha1: installation.installer_sha1,
+        verifiedArtifacts: installation.artifacts.length,
         baseJarSha1: baseHash,
         basePreserved: true,
         launcherProfilesPreserved: true,
@@ -332,7 +345,7 @@ try {
       2,
     ),
   );
-  console.log('Official Forge integration verification passed.');
+  console.log(`Official ${label} integration verification passed.`);
 } finally {
   child.stdin.end();
   if (child.exitCode === null) {

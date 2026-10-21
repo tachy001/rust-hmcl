@@ -5,7 +5,8 @@
 新实例默认使用独立游戏目录，原实例的世界、模组和配置不会复制或改写。
 
 当前接受现代安装格式：官方 `spec=1`、BootstrapLauncher 启动类，以及基础游戏要求 Java 17 或更高。
-旧版 Forge 和 NeoForge 尚未接入。`.mrpack` 的 Forge 依赖尚不支持，整合包入口仍只接受原版／Fabric／Quilt。
+旧版 Forge 尚未接入。NeoForge 现已提供后端接口，见 [NeoForge 后端说明](NEOFORGE-INSTALLATION.md)。
+`.mrpack` 的 Forge／NeoForge 依赖尚不支持，整合包入口仍只接受原版／Fabric／Quilt。
 
 安装器使用单独的 Java 进程；启动器本身仍无需 Java。沿用该实例的 Java 选择、架构检查与自动下载设置，
 隐藏的 Java 不参与自动选择。Java 版本不匹配或禁止自动下载且没有所需环境时会明确报错。
