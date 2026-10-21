@@ -73,6 +73,13 @@ NeoForge 1.20.4 当时有 245 项，推荐 20.4.253。实际安装验证固定�
 同一服务程序在新的 `neoforge-online-proof-TuNqZ7` 和 `forge-online-proof-ksuhUP` 目录分别通过完整回归，
 服务程序 SHA-256 为 `ee949e983e8c3769bc57fc21b85a19e69a06affef11830f3d82dc93bd9a50859`。
 
+提交 `486a9d2` 的 [远端构建](https://github.com/tachy001/rust-hmcl/actions/runs/39550908355)
+已通过 Windows、Linux、macOS ARM／Intel 四个新版 Tauri 构建。
+远端和本机分别通过 24 项隐藏原生窗口检查，包括 NeoForge 非法版本在任务或 Java 执行前被拒绝。
+正向安装、修复与模组下载由上面的真实 Service 脚本另行验证。
+两端证据均对应同一个 Windows 单 EXE，SHA-256 为
+`4e52e5ac9292bed73946bea5b5f34ef96ed6da71f302599ab2b02d602f2e6340`，无外置 WebView2Loader DLL 导入。
+
 参考：[NeoForge 用户说明](https://docs.neoforged.net/user/docs/client/)、
 [官方客户端安装实现](https://github.com/neoforged/LegacyInstaller/blob/main/src/main/java/net/minecraftforge/installer/actions/ClientInstall.java)、
 [官方命令入口](https://github.com/neoforged/LegacyInstaller/blob/main/src/main/java/net/minecraftforge/installer/SimpleInstaller.java)。
