@@ -90,6 +90,13 @@ node scripts/test-install-online.mjs --fixture .tools/install-online-proof-xxxxx
 这些值来自当时的官方接口，不能作为固定版本常量。
 独立测试目录实际完成指定 Fabric 0.19.5 与 Quilt 0.30.1 安装，原客户端复用，既有实例配置保留。
 
+程序提交 `93de71b` 的 [远端构建](https://github.com/tachy001/rust-hmcl/actions/runs/39547982722)
+已通过 Windows、Linux、macOS ARM／Intel 四个新版 Tauri 构建。
+远端与本机分别通过 23 项隐藏原生窗口检查；新增检查验证 loader_versions IPC 在联网前拒绝非法实例路径，
+正向联网目录查询和指定版本安装则由上面的真实 Service 脚本单独验证。
+两端检查对应同一个 Windows 单 EXE，SHA-256 为
+`fd62ab78cc5788fd8ae3bd89ce77aecf5352490d16b191ad4685b0645034a130`，无外置 WebView2Loader DLL 导入。
+
 官方元数据来源：
 [Fabric](https://meta.fabricmc.net/v2/versions/loader/1.20.1)、
 [Quilt](https://meta.quiltmc.org/v3/versions/loader/1.20.1)、
