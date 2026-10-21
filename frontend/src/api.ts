@@ -45,6 +45,13 @@ export interface Snapshot {
   instances: Instance[];
   avatars: Record<string, string>;
 }
+export interface PlatformInfo {
+  system: 'windows' | 'macos' | 'linux';
+  architecture: string;
+  java_executable: string;
+  classpath_separator: string;
+  data_directory: string;
+}
 export interface Task {
   id: number;
   launch_id: string | null;
@@ -137,6 +144,7 @@ export const api = {
   pickImport: (content: 'mods' | 'resources', folder = false) =>
     invoke<string[]>('pick_import', { content, folder }),
   snapshot: () => invoke<Snapshot>('snapshot'),
+  platformInfo: () => invoke<PlatformInfo>('platform_info'),
   save: (config: Config) => invoke<Snapshot>('update_config', { config }),
   task: () => invoke<Task>('task'),
   taskReport: (taskId: number) => invoke<string>('task_report', { taskId }),

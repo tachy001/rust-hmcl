@@ -4431,6 +4431,7 @@ dependencies = [
  "rfd",
  "rust-hmcl",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
 ]

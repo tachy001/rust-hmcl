@@ -11,6 +11,8 @@
     "test:ui": "node scripts/test-web-ui.mjs",
     "test:console": "node scripts/test-launch-console.mjs",
     "test:native": "node scripts/test-native-ui.mjs",
+    "test:platform": "node scripts/test-platform-ui.mjs",
+    "package:platform": "node scripts/package-platform.mjs",
     "format:check": "prettier --check frontend scripts/*.mjs vite.config.ts tsconfig.json package.json src-tauri/*.json src-tauri/capabilities/*.json"
   },
   "dependencies": {

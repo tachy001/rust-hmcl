@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod platform_probe;
 use rust_hmcl::{
     game::Version,
     java_runtime::Runtime,
@@ -18,6 +19,10 @@ async fn blocking<T: Send + 'static>(
 }
 // Keep errors on the UI command boundary as strings; core retains anyhow context.
 
+#[tauri::command]
+fn platform_info(service: State<'_, Service>) -> rust_hmcl::platform::PlatformInfo {
+    service.platform_info()
+}
 #[tauri::command]
 async fn snapshot(service: State<'_, Service>) -> Result<Snapshot, String> {
     let service = service.inner().clone();
@@ -228,6 +233,13 @@ async fn enable_resources(
 }
 fn main() {
     let mut context = tauri::generate_context!();
+    let platform_probe = platform_probe::PlatformProbe::from_args().unwrap_or_else(|error| {
+        eprintln!("Platform verification: {error:#}");
+        std::process::exit(2);
+    });
+    if let Some(probe) = &platform_probe {
+        probe.configure(&mut context);
+    }
     // Tauri's Windows shadow adds a white 1px frame and a second corner mask.
     // The transparent WebView owns the complete smooth outline instead.
     #[cfg(target_os = "windows")]
@@ -259,9 +271,21 @@ fn main() {
             std::process::exit(2);
         }
     }
+    let page_probe = platform_probe.clone();
     tauri::Builder::default()
-        .setup(|app| {
+        .on_page_load(move |webview, payload| {
+            if let Some(probe) = &page_probe {
+                if let Err(error) = probe.page_loaded(webview, payload) {
+                    eprintln!("Platform verification: {error:#}");
+                    webview.app_handle().exit(2);
+                }
+            }
+        })
+        .setup(move |app| {
             app.manage(Service::load()?);
+            if let Some(probe) = &platform_probe {
+                probe.setup(app)?;
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -273,6 +297,7 @@ fn main() {
             mod_environment,
             search_mods,
             snapshot,
+            platform_info,
             update_config,
             task,
             task_report,

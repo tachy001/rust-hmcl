@@ -11,6 +11,7 @@ use std::io::{self, BufRead, Write};
 #[serde(tag = "method", rename_all = "snake_case", deny_unknown_fields)]
 enum Request {
     Snapshot,
+    PlatformInfo,
     InspectModpack {
         path: String,
     },
@@ -58,6 +59,7 @@ enum Request {
 fn execute(service: &Service, request: Request) -> anyhow::Result<Value> {
     Ok(match request {
         Request::Snapshot => serde_json::to_value(service.snapshot()?)?,
+        Request::PlatformInfo => serde_json::to_value(service.platform_info())?,
         Request::InspectModpack { path } => serde_json::to_value(service.inspect_modpack(&path)?)?,
         Request::Task => serde_json::to_value(service.task()?)?,
         Request::TaskReport { task_id } => serde_json::to_value(service.task_report(task_id)?)?,

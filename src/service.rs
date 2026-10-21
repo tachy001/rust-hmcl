@@ -191,6 +191,9 @@ impl Service {
             .map_err(|_| anyhow::anyhow!("任务状态不可用"))?
             .clone())
     }
+    pub fn platform_info(&self) -> crate::platform::PlatformInfo {
+        crate::platform::Platform::current().info()
+    }
     pub fn update_config(&self, mut config: Config) -> Result<Snapshot> {
         let task = self
             .task

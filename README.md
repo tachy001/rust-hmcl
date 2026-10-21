@@ -4,6 +4,8 @@
 
 项目面向 Windows、Linux 和 macOS，目前为开发预览版。内部包名和数据目录保留 rust-hmcl，以兼容已有配置。
 
+三端的系统基线、Java 发现规则、应用包与原生验证方式见 [平台适配说明](docs/PLATFORMS.md)。
+
 ## 使用
 
 Windows 预览版见 [Releases](https://github.com/tachy001/rust-hmcl/releases)。下载 `AsterLauncher.exe` 可单独运行，完整 ZIP 另附说明与许可证。WebView2 加载器已静态链接，无需外置 DLL；Windows 仍需要系统 WebView2 Runtime。本机新版使用 `dist/aster-windows-x64-<提交号>/` 保存，具体程序来源见目录内 `build-info.json`。

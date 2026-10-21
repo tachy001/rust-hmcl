@@ -107,6 +107,7 @@ try {
   assert.ok(path, 'Downloaded Java path was not registered');
   const registered = await rpc('register_java', { path });
   assert.equal(registered.runtime.major, major);
+  assert.equal(registered.runtime.compatible, true);
   const executableTime = (await stat(path)).mtimeMs;
   await runDownload();
   const second = await rpc('snapshot');
@@ -147,6 +148,7 @@ try {
     stagingRemoved: true,
     verifiedAt: new Date().toISOString(),
   };
+  await mkdir(join(root, 'dist'), { recursive: true });
   await writeFile(join(root, 'dist', 'java-online-proof.json'), JSON.stringify(proof, null, 2));
   console.log(`Java online verification passed: ${join(root, 'dist', 'java-online-proof.json')}`);
 } finally {

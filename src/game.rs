@@ -59,22 +59,10 @@ impl crate::loader_catalog::CatalogSource for Worker {
 }
 
 pub fn os() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "windows"
-    } else if cfg!(target_os = "macos") {
-        "osx"
-    } else {
-        "linux"
-    }
+    crate::platform::Platform::current().minecraft_os()
 }
 pub fn arch() -> &'static str {
-    if cfg!(target_arch = "aarch64") {
-        "aarch64"
-    } else if cfg!(target_arch = "x86") {
-        "x86"
-    } else {
-        "x86_64"
-    }
+    crate::platform::Platform::current().architecture()
 }
 pub fn safe_join(root: &Path, name: &str) -> Result<PathBuf> {
     // Both separator styles must be checked, even when importing a Windows manifest on Unix.
@@ -739,7 +727,9 @@ fn launch_args(
         ("classpath", cp.clone()),
         (
             "classpath_separator",
-            if cfg!(windows) { ";" } else { ":" }.into(),
+            crate::platform::Platform::current()
+                .classpath_separator()
+                .into(),
         ),
         ("library_directory", libraries.to_string_lossy().into()),
         ("resolution_width", config.width.to_string()),
@@ -846,11 +836,9 @@ impl Worker {
         if !(8..=99).contains(&major) {
             bail!("Java 主版本应在 8–99 之间");
         }
-        let platform = if os() == "osx" { "mac" } else { os() };
-        let cpu = match arch() {
-            "x86_64" => "x64",
-            value => value,
-        };
+        let host = crate::platform::Platform::current();
+        let platform = host.adoptium_os();
+        let cpu = host.adoptium_arch()?;
         self.status(format!("获取 Java {major} 运行环境信息…"));
         let endpoint = |image| {
             format!("https://api.adoptium.net/v3/assets/latest/{major}/hotspot?architecture={cpu}&image_type={image}&os={platform}")

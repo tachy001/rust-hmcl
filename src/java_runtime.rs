@@ -20,14 +20,11 @@ pub struct Runtime {
     pub compatible: bool,
 }
 pub fn executable() -> &'static str {
-    if cfg!(windows) {
-        "java.exe"
-    } else {
-        "java"
-    }
+    crate::platform::Platform::current().java_executable()
 }
 
 pub fn candidates(registered: &[String]) -> Vec<PathBuf> {
+    let platform = crate::platform::Platform::current();
     let mut paths = registered.iter().map(PathBuf::from).collect::<Vec<_>>();
     let mut roots = vec![crate::config::data_dir().join("java")];
     if let Some(home) = std::env::var_os("JAVA_HOME") {
@@ -69,21 +66,41 @@ pub fn candidates(registered: &[String]) -> Vec<PathBuf> {
                 }
             }
         }
-    } else if cfg!(target_os = "macos") {
-        roots.push(PathBuf::from("/Library/Java/JavaVirtualMachines"));
-    } else {
-        roots.extend([PathBuf::from("/usr/lib/jvm"), PathBuf::from("/usr/java")]);
     }
-    if let Some(home) = dirs::home_dir() {
-        roots.push(home.join(".sdkman/candidates/java"));
+    roots.extend(platform.system_java_roots(dirs::home_dir().as_deref()));
+    if platform.system() == crate::platform::OperatingSystem::Macos {
+        for prefix in ["/opt/homebrew/opt", "/usr/local/opt"] {
+            if let Ok(entries) = std::fs::read_dir(prefix) {
+                roots.extend(
+                    entries
+                        .filter_map(Result::ok)
+                        .filter(|entry| {
+                            let name = entry.file_name().to_string_lossy().into_owned();
+                            name == "openjdk" || name.starts_with("openjdk@")
+                        })
+                        .map(|entry| entry.path()),
+                );
+            }
+        }
     }
     for root in roots {
+        for relative in [
+            "bin/java",
+            "Contents/Home/bin/java",
+            "libexec/openjdk.jdk/Contents/Home/bin/java",
+        ] {
+            if !cfg!(windows) {
+                paths.push(root.join(relative));
+            }
+        }
         for entry in walkdir::WalkDir::new(root)
             .max_depth(7)
             .into_iter()
             .filter_map(Result::ok)
         {
-            if entry.file_type().is_file() && entry.file_name() == executable() {
+            if (entry.file_type().is_file() || entry.file_type().is_symlink())
+                && entry.file_name() == executable()
+            {
                 paths.push(entry.into_path());
             }
         }
@@ -92,7 +109,13 @@ pub fn candidates(registered: &[String]) -> Vec<PathBuf> {
     paths
         .into_iter()
         .filter_map(|path| {
+            if platform.is_java_stub(&path) {
+                return None;
+            }
             let path = crate::game::java_compatible_path(path.canonicalize().ok()?);
+            if !path.is_file() || platform.is_java_stub(&path) {
+                return None;
+            }
             let key = if cfg!(windows) {
                 path.to_string_lossy().to_lowercase()
             } else {
@@ -129,6 +152,9 @@ pub fn discover(
         if cancel.load(Ordering::Relaxed) {
             bail!("Java 检测已取消");
         }
+        if is_hidden(&path, hidden) {
+            continue;
+        }
         if let Ok(runtime) = probe(&path) {
             if is_hidden(&runtime.path, hidden) {
                 continue;
@@ -149,6 +175,9 @@ pub fn discover(
 }
 
 pub fn probe(path: &Path) -> Result<Runtime> {
+    if crate::platform::Platform::current().is_java_stub(path) {
+        bail!("这是 macOS 的 Java 提示程序，请选择实际安装的 JDK 或 JRE");
+    }
     let mut command = Command::new(path);
     command
         .args(["-XshowSettings:properties", "-version"])

@@ -2,10 +2,19 @@ name: Native launcher
 on: [push, pull_request, workflow_dispatch]
 jobs:
   web-desktop:
+    name: web-desktop (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-24.04, macos-14, macos-15-intel]
+        include:
+          - os: windows-latest
+            distribution: windows-x64
+          - os: ubuntu-22.04
+            distribution: linux-x64
+          - os: macos-14
+            distribution: macos-arm64
+          - os: macos-15-intel
+            distribution: macos-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -16,19 +25,58 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev xvfb dbus-x11
       - run: npm ci
       - run: npm run build
       - if: runner.os == 'Windows'
         run: npm run test:console
       - run: cargo test -p rust-hmcl --lib --no-default-features --locked
-      - run: npm run tauri build -- --no-bundle
+      - if: runner.os == 'Windows'
+        run: npm run tauri build -- --no-bundle
+      - if: runner.os == 'macOS'
+        run: npm run tauri build -- --bundles app
+      - if: runner.os == 'Linux'
+        run: npm run tauri build -- --bundles deb
+      - name: Select the actual packaged executable
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/target/release/bundle/macos/Aster Launcher.app/Contents/MacOS/rust-hmcl-desktop" >> "$GITHUB_ENV"
+          elif [ "$RUNNER_OS" = Windows ]; then
+            echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/target/release/rust-hmcl-desktop.exe" >> "$GITHUB_ENV"
+          else
+            echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/target/release/rust-hmcl-desktop" >> "$GITHUB_ENV"
+          fi
       - if: runner.os == 'Windows'
         run: node scripts/verify-windows-exe.mjs target/release/rust-hmcl-desktop.exe
       - if: runner.os == 'Windows'
         run: npm run test:native
+      - if: runner.os != 'Linux'
+        run: npm run test:platform
+      - if: runner.os == 'Linux'
+        run: dbus-run-session -- xvfb-run -a node scripts/test-platform-ui.mjs
         env:
-          HMCL_DESKTOP_BIN: ${{ github.workspace }}/target/release/rust-hmcl-desktop.exe
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          GDK_BACKEND: x11
+      - run: cargo build --bin hmcl-service --no-default-features --locked
+      - name: Download and probe the matching Java runtime without starting a game
+        run: node scripts/test-java-online.mjs
+        env:
+          HMCL_SERVICE_BIN: ${{ github.workspace }}/target/debug/hmcl-service${{ runner.os == 'Windows' && '.exe' || '' }}
+      - run: npm run package:platform
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-proof-${{ matrix.distribution }}
+          path: |
+            dist/platform-ui-proof/
+            dist/java-online-proof.json
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aster-distribution-${{ matrix.distribution }}
+          path: dist/distributions/
       - if: always() && runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
