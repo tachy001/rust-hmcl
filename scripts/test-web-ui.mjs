@@ -223,6 +223,13 @@ try {
   await page.goto(base);
   await expect(page.getByRole('button', { name: '选择游戏版本', exact: true })).toBeEnabled();
   await expect(page.locator('.launch-primary')).toContainText('1.20.1');
+  await page.evaluate(() => {
+    window.addEventListener('contextmenu', (event) => {
+      window.__lastContextMenuPrevented = event.defaultPrevented;
+    });
+  });
+  await page.locator('.launch-primary').click({ button: 'right' });
+  assert.equal(await page.evaluate(() => window.__lastContextMenuPrevented), true);
   const settle = () =>
     page.evaluate(() =>
       Promise.all(
@@ -343,6 +350,14 @@ try {
   assert.equal(animation.duration, '0.4s, 0.4s');
   await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
   await page.getByRole('textbox', { name: '离线用户名' }).fill('RustPlayer');
+  const playerInput = page.getByRole('textbox', { name: '离线用户名' });
+  await page.evaluate(() => (window.__lastContextMenuPrevented = false));
+  await playerInput.click({ button: 'right' });
+  assert.equal(await page.evaluate(() => window.__lastContextMenuPrevented), true);
+  await playerInput.press('ControlOrMeta+A');
+  await playerInput.press('Backspace');
+  await expect(playerInput).toHaveValue('');
+  await playerInput.fill('RustPlayer');
   await page.getByRole('button', { name: '添加账户', exact: true }).click();
   await expect(page.locator('.account-nav b')).toHaveText('RustPlayer');
   assert.ok(
@@ -928,6 +943,7 @@ try {
         modrinthProof,
         passed: [
           'snapshot',
+          'browser context menus are suppressed on page and input; keyboard text editing remains available',
           'Aster home favorites persist and library filter updates after unpinning',
           'original island scene uses transform animation',
           'Java manager rejects invalid manual paths without changing configuration',

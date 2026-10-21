@@ -186,6 +186,13 @@ try {
   await assert.rejects(invoke('start_job', { job: { kind: 'launch', id: '../escape' } }));
   assert.equal((await invoke('task')).running, false);
   await expect(page.locator('.launch-primary')).toContainText('native-fixture');
+  await page.evaluate(() => {
+    window.addEventListener('contextmenu', (event) => {
+      window.__lastContextMenuPrevented = event.defaultPrevented;
+    });
+  });
+  await page.locator('.launch-primary').click({ button: 'right' });
+  assert.equal(await page.evaluate(() => window.__lastContextMenuPrevented), true);
   await expect(page.getByRole('alert')).toHaveCount(0);
   const settle = () =>
     page.evaluate(() =>
@@ -243,6 +250,14 @@ try {
   await page.getByRole('button', { name: '账户', exact: true }).click();
   await expect(page.locator('.page').last()).not.toHaveAttribute('inert');
   await page.getByRole('textbox', { name: '离线用户名', exact: true }).fill('NativePlayer');
+  const playerInput = page.getByRole('textbox', { name: '离线用户名', exact: true });
+  await page.evaluate(() => (window.__lastContextMenuPrevented = false));
+  await playerInput.click({ button: 'right' });
+  assert.equal(await page.evaluate(() => window.__lastContextMenuPrevented), true);
+  await playerInput.press('ControlOrMeta+A');
+  await playerInput.press('Backspace');
+  await expect(playerInput).toHaveValue('');
+  await playerInput.fill('NativePlayer');
   await page.getByRole('button', { name: '添加账户', exact: true }).click();
   await expect(page.locator('.account-nav b')).toHaveText('NativePlayer');
   assert.equal(
@@ -509,6 +524,7 @@ try {
     passed: [
       'EXE runs alone from an isolated directory without WebView2Loader.dll',
       'hidden native window',
+      'browser context menus suppressed on page and input without breaking keyboard text editing',
       'Aster home favorite persists through real native IPC',
       'four transparent antialiased corners without opaque page background',
       'bundled Vue assets and CSP',
