@@ -52,6 +52,12 @@ pub struct Worker {
     pub threads: usize,
 }
 
+impl crate::loader_catalog::CatalogSource for Worker {
+    fn fetch_json(&self, url: &str) -> Result<Value> {
+        self.json(url)
+    }
+}
+
 pub fn os() -> &'static str {
     if cfg!(target_os = "windows") {
         "windows"

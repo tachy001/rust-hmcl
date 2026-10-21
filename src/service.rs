@@ -61,11 +61,15 @@ pub enum Job {
         id: String,
         #[serde(default)]
         name: Option<String>,
+        #[serde(default)]
+        version: Option<String>,
     },
     Quilt {
         id: String,
         #[serde(default)]
         name: Option<String>,
+        #[serde(default)]
+        version: Option<String>,
     },
     Forge {
         id: String,
@@ -215,6 +219,43 @@ impl Service {
                 }
             })
             .context("版本列表为空")
+    }
+    pub fn loader_versions(
+        &self,
+        id: &str,
+        loader: crate::loader_catalog::LoaderKind,
+    ) -> Result<crate::loader_catalog::LoaderVersions> {
+        use crate::loader_catalog::{LoaderCatalog, LoaderKind, LoaderVersions};
+        let config = self.config()?;
+        let root = Path::new(&config.game_dir);
+        game::version_dir(root, id)?;
+        let metadata = crate::metadata::resolve(root, id)?;
+        let minecraft = metadata["_gameVersion"]
+            .as_str()
+            .context("缺少基础游戏版本")?;
+        let (tx, _rx) = mpsc::channel();
+        let worker = Worker::new(tx, Arc::new(AtomicBool::new(false)))?;
+        let versions = LoaderCatalog::new(&worker).releases(minecraft, loader)?;
+        let reason = if versions.is_empty() {
+            Some("该 Minecraft 版本没有可用加载器".into())
+        } else if loader == LoaderKind::Forge
+            && metadata["javaVersion"]["majorVersion"]
+                .as_u64()
+                .unwrap_or(8)
+                < 17
+        {
+            Some("Forge 自动安装目前需要使用 Java 17 及以上的现代游戏版本".into())
+        } else {
+            None
+        };
+        Ok(LoaderVersions {
+            instance_id: id.into(),
+            minecraft: minecraft.into(),
+            loader,
+            install_supported: reason.is_none(),
+            reason,
+            versions,
+        })
     }
     pub fn runtimes(&self) -> Result<Vec<java_runtime::Runtime>> {
         let config = self.config()?;
@@ -395,10 +436,12 @@ impl Service {
         if let Job::Fabric {
             id,
             name: Some(name),
+            ..
         }
         | Job::Quilt {
             id,
             name: Some(name),
+            ..
         }
         | Job::Forge {
             id,
@@ -454,12 +497,14 @@ impl Service {
                     bail!("同名实例已存在，不能覆盖");
                 }
             }
-            Job::Launch { id }
-            | Job::Install { id }
-            | Job::Repair { id }
-            | Job::Fabric { id, .. }
-            | Job::Quilt { id, .. } => {
+            Job::Launch { id } | Job::Install { id } | Job::Repair { id } => {
                 game::version_dir(Path::new(&config.game_dir), id)?;
+            }
+            Job::Fabric { id, version, .. } | Job::Quilt { id, version, .. } => {
+                game::version_dir(Path::new(&config.game_dir), id)?;
+                if let Some(version) = version {
+                    crate::loader_catalog::validate_component(version)?;
+                }
             }
             Job::Forge { id, version, .. } => {
                 game::version_dir(Path::new(&config.game_dir), id)?;
@@ -576,13 +621,23 @@ impl Service {
                         !java_runtime::is_hidden(&path, std::slice::from_ref(value))
                     });
                 }
-                Job::Fabric { id, name } => {
-                    config.selected =
-                        worker.install_loader(root, &id, Loader::Fabric, None, name.as_deref())?;
+                Job::Fabric { id, name, version } => {
+                    config.selected = worker.install_loader(
+                        root,
+                        &id,
+                        Loader::Fabric,
+                        version.as_deref(),
+                        name.as_deref(),
+                    )?;
                 }
-                Job::Quilt { id, name } => {
-                    config.selected =
-                        worker.install_loader(root, &id, Loader::Quilt, None, name.as_deref())?;
+                Job::Quilt { id, name, version } => {
+                    config.selected = worker.install_loader(
+                        root,
+                        &id,
+                        Loader::Quilt,
+                        version.as_deref(),
+                        name.as_deref(),
+                    )?;
                 }
                 Job::Forge { id, name, version } => {
                     let installed = worker.install_forge(
@@ -673,7 +728,8 @@ mod tests {
             assert!(service
                 .start(Job::Quilt {
                     id: "source".into(),
-                    name: Some(name.into())
+                    name: Some(name.into()),
+                    version: None
                 })
                 .is_err());
             assert!(service
@@ -691,6 +747,13 @@ mod tests {
                 version: Some("../bad".into())
             })
             .is_err());
+        for kind in ["fabric", "quilt"] {
+            let job: Job = serde_json::from_value(serde_json::json!({
+                "kind":kind,"id":"source","version":"../bad"
+            }))
+            .unwrap();
+            assert!(service.start(job).is_err());
+        }
         assert_eq!(service.task().unwrap().id, 0);
         assert_eq!(
             serde_json::to_value(service.config().unwrap()).unwrap(),
@@ -858,6 +921,12 @@ mod tests {
             ..Default::default()
         });
         assert!(service.snapshot().unwrap().instances.is_empty());
+        for id in ["missing", "../escape"] {
+            assert!(service
+                .loader_versions(id, crate::loader_catalog::LoaderKind::Fabric)
+                .is_err());
+        }
+        assert_eq!(service.task().unwrap().id, 0);
         assert!(!path.exists());
         assert!(serde_json::from_str::<Job>(r#"{"kind":"shell","command":"anything"}"#).is_err());
     }

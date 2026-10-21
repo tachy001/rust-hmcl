@@ -48,22 +48,17 @@ impl Worker {
     ) -> Result<Value> {
         crate::game::version_dir(Path::new("."), game)?;
         let selected = if let Some(version) = version {
+            crate::loader_catalog::validate_component(version)?;
             version.to_owned()
         } else {
             self.status(format!("获取 {} 加载器版本…", loader.name()));
-            let versions = self.json(&format!("{}/versions/loader/{game}", loader.api()))?;
-            let list = versions.as_array().context("加载器版本列表格式错误")?;
-            let item = list
-                .iter()
-                .find(|v| v["loader"]["stable"].as_bool() == Some(true))
-                .or_else(|| list.first())
-                .context("该 Minecraft 版本没有可用加载器")?;
-            item["loader"]["version"]
-                .as_str()
-                .context("缺少加载器版本")?
-                .to_owned()
+            let kind = match loader {
+                Loader::Fabric => crate::loader_catalog::LoaderKind::Fabric,
+                Loader::Quilt => crate::loader_catalog::LoaderKind::Quilt,
+            };
+            crate::loader_catalog::LoaderCatalog::new(self).recommended(game, kind)?
         };
-        crate::game::version_dir(Path::new("."), &selected)?;
+        crate::loader_catalog::validate_component(game)?;
         let mut profile = self.json(&format!(
             "{}/versions/loader/{game}/{selected}/profile/json",
             loader.api()

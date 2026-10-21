@@ -181,6 +181,9 @@ try {
     true,
   );
   const configBefore = await readFile(join(fixture, 'config.json'));
+  await assert.rejects(invoke('loader_versions', { id: '../escape', loader: 'fabric' }), (error) =>
+    String(error).includes('版本名称不能包含路径分隔符'),
+  );
   await assert.rejects(invoke('update_config', { config: { ...snapshot.config, memory: 1 } }));
   assert.deepEqual(await readFile(join(fixture, 'config.json')), configBefore);
   await assert.rejects(invoke('start_job', { job: { kind: 'launch', id: '../escape' } }));
@@ -531,6 +534,7 @@ try {
       'snapshot IPC',
       'loader name conflict is rejected before starting a native worker',
       'Forge rejects invalid inputs before executing Java and the bundled original anvil icon renders',
+      'loader catalog IPC rejects invalid instance paths before network access',
       'invalid configuration does not write',
       'traversal rejected before game start',
       'offline account persistence',

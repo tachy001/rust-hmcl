@@ -74,6 +74,7 @@ function rpc(method, args = {}) {
       'cancel_job',
       'launch_plan',
       'mod_environment',
+      'loader_versions',
     ].includes(method),
   );
   if (method === 'start_job')
@@ -106,9 +107,11 @@ async function run(job, expectedFailure = false) {
     }
     assert.equal(task.game_running, false);
     if (task.id === id && !task.running) {
-      if (expectedFailure) assert.match(task.error ?? '', /同名实例已存在/);
+      if (expectedFailure === 'existing-or-new') {
+        if (task.error !== null) assert.match(task.error, /同名实例已存在/);
+      } else if (expectedFailure) assert.match(task.error ?? '', /同名实例已存在/);
       else assert.equal(task.error, null);
-      return;
+      return task;
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
@@ -126,6 +129,15 @@ async function validatePlan(id, mainClass) {
   for (const path of files)
     assert.ok((await stat(path)).isFile(), `Missing classpath entry: ${path}`);
   return { id, mainClass, classpathFiles: files.length, unresolvedPlaceholders: false };
+}
+async function profileSnapshot() {
+  const { instances } = await rpc('snapshot');
+  return Promise.all(
+    instances.map(async ({ id }) => ({
+      path: join(game, 'versions', id, `${id}.json`),
+      bytes: await readFile(join(game, 'versions', id, `${id}.json`)),
+    })),
+  );
 }
 try {
   console.log(`Isolated fixture: ${fixture}`);
@@ -246,15 +258,51 @@ try {
     const before = await readFile(join(game, 'versions', id, `${id}.json`));
     await assert.rejects(rpc('start_job', { job: { kind: loader, id: renamed, name } }));
     assert.deepEqual(await readFile(join(game, 'versions', id, `${id}.json`)), before);
-    const defaultInstance = snapshot.instances.find(
-      (item) => item.icon === loader && item.id !== name,
-    );
-    if (defaultInstance) {
-      const defaultPath = join(game, 'versions', defaultInstance.id, `${defaultInstance.id}.json`);
-      const defaultBefore = await readFile(defaultPath);
-      await run({ kind: loader, id: version }, true);
-      assert.deepEqual(await readFile(defaultPath), defaultBefore);
+    // Recommendations can change between runs; an older default profile is not today's default.
+    const oldProfiles = await profileSnapshot();
+    await run({ kind: loader, id: version }, 'existing-or-new');
+    for (const item of oldProfiles) assert.deepEqual(await readFile(item.path), item.bytes);
+    const currentProfiles = await profileSnapshot();
+    await run({ kind: loader, id: version }, true);
+    for (const item of currentProfiles) {
+      assert.deepEqual(await readFile(item.path), item.bytes);
     }
+  }
+  const explicitLoaderVersions = [];
+  if (process.argv.includes('--loader-versions')) {
+    const basePath = join(game, 'versions', renamed, `${renamed}.json`);
+    const baseBefore = await readFile(basePath);
+    const baseJar = join(game, 'versions', renamed, `${renamed}.jar`);
+    assert.equal(await digest(baseJar), meta.downloads.client.sha1);
+    const baseJarMtime = (await stat(baseJar)).mtimeMs;
+    for (const loader of ['fabric', 'quilt']) {
+      const result = await rpc('loader_versions', { id: renamed, loader });
+      assert.equal(result.minecraft, version);
+      const chosen = result.versions.find((item) => item.recommended)?.version;
+      assert.ok(chosen);
+      const name = `Online ${loader} Chosen ${Date.now().toString(36)}`;
+      await run({ kind: loader, id: renamed, name, version: chosen });
+      const profile = JSON.parse(
+        await readFile(join(game, 'versions', name, `${name}.json`), 'utf8'),
+      );
+      assert.equal(profile.inheritsFrom, renamed);
+      const coordinate =
+        loader === 'fabric' ? 'net.fabricmc:fabric-loader' : 'org.quiltmc:quilt-loader';
+      assert.ok(profile.libraries.some((item) => item.name === `${coordinate}:${chosen}`));
+      const main =
+        loader === 'fabric'
+          ? 'net.fabricmc.loader.impl.launch.knot.KnotClient'
+          : 'org.quiltmc.loader.impl.launch.knot.KnotClient';
+      plans.push(await validatePlan(name, main));
+      assert.deepEqual(await rpc('mod_environment', { id: name }), { game: version, loader });
+      await assert.rejects(
+        rpc('start_job', { job: { kind: loader, id: renamed, name, version: chosen } }),
+      );
+      explicitLoaderVersions.push({ loader, version: chosen, id: name });
+    }
+    assert.deepEqual(await readFile(basePath), baseBefore);
+    assert.equal(await digest(baseJar), meta.downloads.client.sha1);
+    assert.equal((await stat(baseJar)).mtimeMs, baseJarMtime);
   }
   await mkdir(join(root, 'dist'), { recursive: true });
   await writeFile(
@@ -272,6 +320,7 @@ try {
         verifiedLibraries,
         renamedGameVersion: renamedMetadata.rustHmclGameVersion,
         existingLoaderProfilesPreserved: true,
+        explicitLoaderVersions,
         corruptedClientRepaired: repairCorruption,
         plans,
         verifiedClientReused: true,

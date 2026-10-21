@@ -22,6 +22,10 @@ enum Request {
         id: String,
     },
     Versions,
+    LoaderVersions {
+        id: String,
+        loader: rust_hmcl::loader_catalog::LoaderKind,
+    },
     Runtimes,
     RegisterJava {
         path: String,
@@ -64,6 +68,9 @@ fn execute(service: &Service, request: Request) -> anyhow::Result<Value> {
             serde_json::to_value(rust_hmcl::game::launch_plan(&config)?)?
         }
         Request::Versions => serde_json::to_value(service.versions()?)?,
+        Request::LoaderVersions { id, loader } => {
+            serde_json::to_value(service.loader_versions(&id, loader)?)?
+        }
         Request::Runtimes => serde_json::to_value(service.runtimes()?)?,
         Request::RegisterJava { path } => serde_json::to_value(service.register_java(&path)?)?,
         Request::ModFiles => serde_json::to_value(service.mod_files()?)?,

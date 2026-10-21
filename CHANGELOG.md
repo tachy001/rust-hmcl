@@ -1,5 +1,7 @@
 # 未发布
 
+- 后端新增独立 LoaderCatalog 对象和 CatalogSource 接口，统一 Fabric／Quilt／Forge 版本列表与推荐规则；修复 Quilt 默认选取旧测试版的问题。
+- 新增只读 loader_versions 接口，保留改名实例的 Minecraft 身份；Fabric／Quilt 安装命令支持可选指定版本，旧请求仍可使用默认版本。
 - 关闭页面与输入框中的 WebView 浏览器右键菜单，保留游戏库自定义菜单与键盘文本编辑。
 - 新增现代 Forge 官方安装器流程：推荐／指定版本、独立副本、Java 检查、无界面执行、实际进程取消和排他发布。
 - Forge 安装产物校验与原版本重建修复，保留原实例配置及健康客户端；接入 Forge 模组搜索和安装，新增原创铁砧图标。

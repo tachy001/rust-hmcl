@@ -183,6 +183,15 @@ async fn search_mods(
     blocking(move || service.search_mods(&id, &query)).await
 }
 #[tauri::command]
+async fn loader_versions(
+    id: String,
+    loader: rust_hmcl::loader_catalog::LoaderKind,
+    service: State<'_, Service>,
+) -> Result<rust_hmcl::loader_catalog::LoaderVersions, String> {
+    let service = service.inner().clone();
+    blocking(move || service.loader_versions(&id, loader)).await
+}
+#[tauri::command]
 async fn versions(service: State<'_, Service>) -> Result<Vec<Version>, String> {
     let service = service.inner().clone();
     blocking(move || service.versions()).await
@@ -271,6 +280,7 @@ fn main() {
             start_job,
             cancel_job,
             versions,
+            loader_versions,
             runtimes,
             mod_files,
             toggle_mod,

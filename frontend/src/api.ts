@@ -62,6 +62,15 @@ export interface Version {
   url: string;
   sha1: string;
 }
+export type LoaderKind = 'fabric' | 'quilt' | 'forge';
+export interface LoaderVersions {
+  instance_id: string;
+  minecraft: string;
+  loader: LoaderKind;
+  install_supported: boolean;
+  reason: string | null;
+  versions: { version: string; stable: boolean; recommended: boolean; latest: boolean }[];
+}
 export interface Runtime {
   path: string;
   major: number;
@@ -114,8 +123,7 @@ export type Job =
   | { kind: 'import_pack'; path: string; id: string; optional: boolean; source_sha1: string }
   | { kind: 'import_files'; id: string; content: 'mods' | 'resources'; paths: string[] }
   | { kind: 'launch' | 'install' | 'repair'; id: string }
-  | { kind: 'fabric' | 'quilt'; id: string; name?: string }
-  | { kind: 'forge'; id: string; name?: string; version?: string }
+  | { kind: LoaderKind; id: string; name?: string; version?: string }
   | { kind: 'java'; major: number }
   | { kind: 'install_mod'; id: string; project: string }
   | { kind: 'rename'; id: string; name: string }
@@ -136,6 +144,8 @@ export const api = {
   start: (job: Job) => invoke<number>('start_job', { job }),
   cancel: () => invoke<void>('cancel_job'),
   versions: () => invoke<Version[]>('versions'),
+  loaderVersions: (id: string, loader: LoaderKind) =>
+    invoke<LoaderVersions>('loader_versions', { id, loader }),
   runtimes: () => invoke<Runtime[]>('runtimes'),
   mods: () => invoke<Mod[]>('mod_files'),
   modEnvironment: (id: string) => invoke<ModEnvironment>('mod_environment', { id }),

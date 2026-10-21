@@ -15,8 +15,6 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-const PROMOTIONS: &str =
-    "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
 const MAVEN: &str = "https://maven.minecraftforge.net/net/minecraftforge/forge";
 pub struct Installed {
     pub id: String,
@@ -24,16 +22,7 @@ pub struct Installed {
 }
 
 pub fn validate_version(version: &str) -> Result<()> {
-    if version.is_empty()
-        || version.len() > 80
-        || !version
-            .bytes()
-            .all(|c| c.is_ascii_digit() || c == b'.' || c == b'-')
-        || !version.bytes().any(|c| c.is_ascii_digit())
-    {
-        bail!("Forge 版本只能包含数字、点和连字符");
-    }
-    Ok(())
+    crate::loader_catalog::LoaderKind::Forge.validate_version(version)
 }
 fn stamp() -> Result<String> {
     Ok(format!(
@@ -538,12 +527,8 @@ impl Worker {
             version.to_owned()
         } else {
             self.status("获取 Forge 官方推荐版本…");
-            let promotions = self.json(PROMOTIONS)?;
-            promotions["promos"][format!("{minecraft}-recommended")]
-                .as_str()
-                .or_else(|| promotions["promos"][format!("{minecraft}-latest")].as_str())
-                .context("该游戏版本没有可用的 Forge 官方安装器")?
-                .to_owned()
+            crate::loader_catalog::LoaderCatalog::new(self)
+                .recommended(minecraft, crate::loader_catalog::LoaderKind::Forge)?
         };
         validate_version(&version)?;
         let coordinate = format!("{minecraft}-{version}");

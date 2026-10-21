@@ -9,6 +9,7 @@ pub mod game;
 pub mod imports;
 pub mod instance_ops;
 pub mod java_runtime;
+pub mod loader_catalog;
 pub mod loaders;
 pub mod metadata;
 pub mod modpack;
