@@ -74,9 +74,23 @@ if (process.platform === 'win32') {
   );
   if (process.platform === 'darwin') {
     execFileSync('codesign', ['--verify', '--deep', '--strict', app], { stdio: 'inherit' });
-    await cp(app, join(stage, basename(app)), { recursive: true, verbatimSymlinks: true });
+    const dmg = (await readdir(join(root, 'target/release/bundle/dmg'))).find((file) =>
+      file.endsWith('.dmg'),
+    );
+    assert.ok(dmg, 'Tauri must produce a macOS DMG for release');
+    await cp(
+      join(root, 'target/release/bundle/dmg', dmg),
+      join(output, `aster-launcher-macos-${process.arch}-${short}.dmg`),
+    );
     assert.ok(
-      (await stat(join(stage, basename(app), 'Contents/MacOS/rust-hmcl-desktop'))).mode & 0o111,
+      (
+        await stat(
+          join(
+            root,
+            'target/release/bundle/macos/Aster Launcher.app/Contents/MacOS/rust-hmcl-desktop',
+          ),
+        )
+      ).mode & 0o111,
     );
   } else {
     await cp(binary, join(stage, 'AsterLauncher'));
@@ -124,8 +138,10 @@ if (process.platform === 'win32') {
       2,
     ),
   );
-  const archive = join(output, `aster-launcher-${os}-${process.arch}-${short}.tar.gz`);
-  execFileSync('tar', ['-czf', archive, '-C', stage, '.'], { cwd: root, stdio: 'inherit' });
+  if (process.platform !== 'darwin') {
+    const archive = join(output, `aster-launcher-${os}-${process.arch}-${short}.tar.gz`);
+    execFileSync('tar', ['-czf', archive, '-C', stage, '.'], { cwd: root, stdio: 'inherit' });
+  }
 }
 const files = await readdir(output);
 const checksums = await Promise.all(

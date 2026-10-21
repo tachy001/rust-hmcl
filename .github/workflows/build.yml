@@ -1,5 +1,12 @@
 name: Native launcher
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   web-desktop:
     name: web-desktop (${{ matrix.os }})
@@ -34,7 +41,7 @@ jobs:
       - if: runner.os == 'Windows'
         run: npm run tauri build -- --no-bundle
       - if: runner.os == 'macOS'
-        run: npm run tauri build -- --bundles app
+        run: npm run tauri build -- --bundles app,dmg
       - if: runner.os == 'Linux'
         run: npm run tauri build -- --bundles deb
       - name: Select the actual packaged executable
@@ -79,6 +86,7 @@ jobs:
         with:
           name: aster-distribution-${{ matrix.distribution }}
           path: dist/distributions/
+          if-no-files-found: error
       - if: always() && runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
@@ -129,3 +137,35 @@ jobs:
             vendor/egui/LICENSE-MIT
             vendor/egui/LICENSE-APACHE
             vendor/egui/PATCHES.md
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: web-desktop
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: aster-distribution-*
+          path: release-assets
+          merge-multiple: true
+      - name: Flatten and select release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-final
+          find release-assets -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.deb' -o -name '*.dmg' -o -name '*.tar.gz' \) -print0 |
+            while IFS= read -r -d '' file; do cp "$file" release-final/; done
+          find release-final -type f -name '*.tar.gz' -delete
+          rm -f release-final/SHA256SUMS-*.txt
+          test "$(find release-final -maxdepth 1 -type f | wc -l)" -eq 5
+          sha256sum release-final/* > release-final/SHA256SUMS.txt
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 星屿 Aster ${{ github.ref_name }} · 三端预览版
+          generate_release_notes: true
+          prerelease: true
+          files: release-final/*
