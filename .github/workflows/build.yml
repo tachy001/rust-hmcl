@@ -160,6 +160,8 @@ jobs:
             while IFS= read -r -d '' file; do cp "$file" release-final/; done
           find release-final -type f -name '*.tar.gz' -delete
           rm -f release-final/SHA256SUMS-*.txt
+          for file in release-final/aster-launcher-macos-arm64-*.dmg; do [ -e "$file" ] && mv "$file" release-final/Aster-macOS-arm64.dmg; done
+          for file in release-final/aster-launcher-macos-x64-*.dmg; do [ -e "$file" ] && mv "$file" release-final/Aster-macOS-x64.dmg; done
           test "$(find release-final -maxdepth 1 -type f | wc -l)" -eq 5
           sha256sum release-final/* > release-final/SHA256SUMS.txt
       - name: Publish release
