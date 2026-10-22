@@ -2,7 +2,7 @@
 
 用户已将目标调整为原创启动器“星屿 Aster”，见 `ASTER-DESIGN.md`。
 当前使用 Rust + Tauri 2 + Vue 3 / TypeScript / CSS，迁移完成前保留
-egui 入口作为功能回归参照。不能把界面更新或一次构建成功视为全部功能验收。
+Tauri/Vue 入口是当前唯一桌面入口。不能把界面更新或一次构建成功视为全部功能验收。
 
 当前开发分工调整为后端优先：按对象职责逐步拆分，前端仅做必要的类型与调用接入。
 加载器版本目录的对象边界和接口契约见 [后端结构与接口](BACKEND-ARCHITECTURE.md)。
@@ -25,11 +25,11 @@ Java 管理提供手动路径注册、全局默认及隐藏／恢复，下载校
 
 ## 结构
 
-- `src/lib.rs`：共用 Rust 核心；`--no-default-features` 不依赖 egui。
+- `src/lib.rs`：共用 Rust 核心，默认构建不依赖桌面 UI 框架。
 - `src/service.rs`：配置、实例目录、Java、任务状态、取消、模组和资源包的命令边界。
 - `src-tauri/`：Tauri 桌面入口，调用同一个 Service；阻塞操作放入工作线程。
 - `frontend/src/`：Aster 原创布局、主题、品牌与浮岛场景，保留有来源记录的 HMCL 游戏图标和皮肤等素材。
-- `src/main.rs`：迁移期间保留的旧版 egui 入口。
+- `src-tauri/src/main.rs`：Tauri 桌面入口与命令边界。
 - `src/bin/hmcl-service.rs`：仅用于无窗口集成测试的 JSON-lines 入口，
   桌面版不启动它、不开放本地 HTTP 后端端口。
 

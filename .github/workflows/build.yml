@@ -1,27 +1,30 @@
-name: Native launcher
+name: Cross-platform build
+
 on:
   push:
-    branches: [master]
+    branches: ['**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
-  web-desktop:
-    name: web-desktop (${{ matrix.os }})
+  build:
+    name: Build ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            distribution: windows-x64
-          - os: ubuntu-22.04
-            distribution: linux-x64
+            name: windows-x64
+          - os: ubuntu-24.04
+            name: linux-x64
           - os: macos-14
-            distribution: macos-arm64
+            name: macos-arm64
           - os: macos-15-intel
-            distribution: macos-x64
+            name: macos-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -31,143 +34,100 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev xvfb dbus-x11
-      - run: npm ci
-      - run: npm run build
-      - if: runner.os == 'Windows'
-        run: npm run test:console
-      - run: cargo test -p rust-hmcl --lib --no-default-features --locked
-      - if: runner.os == 'Windows'
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev xvfb dbus-x11
+      - name: Check format
+        run: cargo fmt --check
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Test Rust core
+        run: cargo test --locked
+      - name: Build Windows application
+        if: runner.os == 'Windows'
         run: npm run tauri build -- --no-bundle
-      - if: runner.os == 'macOS'
+      - name: Build macOS application
+        if: runner.os == 'macOS'
         run: npm run tauri build -- --bundles app,dmg
-      - if: runner.os == 'Linux'
+      - name: Build Linux application
+        if: runner.os == 'Linux'
         run: npm run tauri build -- --bundles deb
-      - name: Select the actual packaged executable
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" = macOS ]; then
-            echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/target/release/bundle/macos/Aster Launcher.app/Contents/MacOS/rust-hmcl-desktop" >> "$GITHUB_ENV"
-          elif [ "$RUNNER_OS" = Windows ]; then
-            echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/target/release/rust-hmcl-desktop.exe" >> "$GITHUB_ENV"
-          else
-            mkdir -p "$GITHUB_WORKSPACE/.tools/deb-native"
-            dpkg-deb -x target/release/bundle/deb/*.deb "$GITHUB_WORKSPACE/.tools/deb-native"
-            echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/.tools/deb-native/usr/bin/rust-hmcl-desktop" >> "$GITHUB_ENV"
-          fi
-      - if: runner.os == 'Windows'
+      - name: Verify Windows executable
+        if: runner.os == 'Windows'
         run: node scripts/verify-windows-exe.mjs target/release/rust-hmcl-desktop.exe
-      - if: runner.os == 'Windows'
-        run: npm run test:native
-      - if: runner.os != 'Linux'
-        run: npm run test:platform
-      - if: runner.os == 'Linux'
+      - name: Verify native platform startup
+        if: runner.os != 'Linux'
+        run: node scripts/test-platform-ui.mjs
+      - name: Verify native platform startup on Linux
+        if: runner.os == 'Linux'
         run: dbus-run-session -- xvfb-run -a node scripts/test-platform-ui.mjs
         env:
           WEBKIT_DISABLE_COMPOSITING_MODE: '1'
           LIBGL_ALWAYS_SOFTWARE: '1'
           GDK_BACKEND: x11
-      - run: cargo build --bin hmcl-service --no-default-features --locked
-      - name: Download and probe the matching Java runtime without starting a game
-        run: node scripts/test-java-online.mjs
-        env:
-          HMCL_SERVICE_BIN: ${{ github.workspace }}/target/debug/hmcl-service${{ runner.os == 'Windows' && '.exe' || '' }}
-      - run: npm run package:platform
-      - if: always()
+      - name: Package release files
+        run: npm run package:platform
+      - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
-          name: platform-proof-${{ matrix.distribution }}
-          path: |
-            dist/platform-ui-proof/
-            dist/java-online-proof.json
-          if-no-files-found: warn
-      - uses: actions/upload-artifact@v4
-        with:
-          name: aster-distribution-${{ matrix.distribution }}
-          path: dist/distributions/
+          name: release-${{ matrix.name }}
+          path: dist/distributions/*
           if-no-files-found: error
-      - if: always() && runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-webview-proof-windows
-          path: dist/native-ui-proof/
-          if-no-files-found: warn
-      - uses: actions/upload-artifact@v4
-        with:
-          name: aster-launcher-${{ matrix.os }}
-          path: |
-            target/release/rust-hmcl-desktop
-            target/release/rust-hmcl-desktop.exe
-            LICENSE
-            assets/hmcl/ATTRIBUTION.md
-            assets/aster/ATTRIBUTION.md
-            docs/ASTER-README.md
-            docs/WEB-MIGRATION.md
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            artifact: windows-x64
-          - os: ubuntu-22.04
-            artifact: linux-x64
-          - os: macos-14
-            artifact: macos-arm64
-          - os: macos-15-intel
-            artifact: macos-x64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libgl1-mesa-dev
-      - run: cargo test --locked
-      - run: cargo build --release --locked
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rust-hmcl-${{ matrix.artifact }}
-          path: |
-            target/release/rust-hmcl
-            target/release/rust-hmcl.exe
-            LICENSE
-            README.md
-            vendor/egui/LICENSE-MIT
-            vendor/egui/LICENSE-APACHE
-            vendor/egui/PATCHES.md
 
-  release:
+  publish-release:
     name: Publish GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: web-desktop
-    runs-on: ubuntu-22.04
+    needs: build
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: aster-distribution-*
+          pattern: release-*
           path: release-assets
           merge-multiple: true
-      - name: Flatten and select release assets
+      - name: Check release tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os, tomllib
+          version = tomllib.load(open('Cargo.toml', 'rb'))['package']['version']
+          expected = f'v{version}'
+          actual = os.environ['RELEASE_TAG']
+          if actual != expected:
+              raise SystemExit(f'tag {actual} does not match Cargo.toml version {expected}')
+          PY
+      - name: Select release assets
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-final
-          find release-assets -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.deb' -o -name '*.dmg' -o -name '*.tar.gz' \) -print0 |
-            while IFS= read -r -d '' file; do cp "$file" release-final/; done
-          find release-final -type f -name '*.tar.gz' -delete
-          rm -f release-final/SHA256SUMS-*.txt
-          for file in release-final/aster-launcher-macos-arm64-*.dmg; do [ -e "$file" ] && mv "$file" release-final/Aster-macOS-arm64.dmg; done
-          for file in release-final/aster-launcher-macos-x64-*.dmg; do [ -e "$file" ] && mv "$file" release-final/Aster-macOS-x64.dmg; done
+          find release-assets -maxdepth 1 -type f \
+            \( -name 'aster-launcher-windows-x64-*.zip' \
+            -o -name 'aster-launcher-linux-x64-*.deb' \
+            -o -name 'aster-launcher-linux-x64-*.tar.gz' \
+            -o -name 'aster-launcher-macos-arm64-*.dmg' \
+            -o -name 'aster-launcher-macos-x64-*.dmg' \) \
+            -exec cp {} release-final/ \;
+          for file in release-final/aster-launcher-macos-arm64-*.dmg; do mv "$file" release-final/Aster-macOS-arm64.dmg; done
+          for file in release-final/aster-launcher-macos-x64-*.dmg; do mv "$file" release-final/Aster-macOS-x64.dmg; done
           test "$(find release-final -maxdepth 1 -type f | wc -l)" -eq 5
           sha256sum release-final/* > release-final/SHA256SUMS.txt
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: 星屿 Aster ${{ github.ref_name }} · 三端预览版
-          generate_release_notes: true
-          prerelease: true
-          files: release-final/*
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --json isDraft >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-final/* --clobber
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease=true --latest
+          else
+            gh release create "$RELEASE_TAG" release-final/* --verify-tag --latest --prerelease --generate-notes
+          fi

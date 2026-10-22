@@ -63,6 +63,6 @@ npm run test:native
 - `frontend/src/`：Aster 界面、控件及原创 SVG 场景。
 - `assets/aster/`：原创品牌素材。
 - `assets/hmcl/`：保留使用的游戏图标、皮肤等素材与来源说明。
-- `src/main.rs`、`vendor/egui/`：迁移期间保留的旧界面及补丁，不是 Aster 的默认桌面入口。
+- `src-tauri/` 与 `frontend/`：Aster 的唯一桌面入口；Rust 核心通过 Tauri 命令向界面提供服务。
 
 设计方向见 [ASTER-DESIGN.md](docs/ASTER-DESIGN.md)。HMCL 和 PCL 是研究参考，Aster 是独立项目；PCL 源码及资源没有移入项目。来源见 [参考索引](docs/REFERENCE-SOURCES.md)、[HMCL 素材说明](assets/hmcl/ATTRIBUTION.md)和 [原创素材说明](assets/aster/ATTRIBUTION.md)。项目许可证见 [LICENSE](LICENSE)。

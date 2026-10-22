@@ -1,5 +1,4 @@
-//! Launcher services shared by the Tauri frontend and the legacy egui frontend.
-//! Building with `--no-default-features --lib` does not compile egui or a WebView.
+//! Object-oriented launcher services shared by the Tauri frontend.
 pub mod catalog;
 pub mod config;
 pub mod diagnostics;
