@@ -121,16 +121,16 @@ jobs:
           set -euo pipefail
           mkdir -p release-final
           find release-assets -maxdepth 1 -type f \
-            \( -name 'aster-launcher-windows-x64-*.zip' \
+            \( -name 'aster-launcher-windows-x64-*.exe' \
             -o -name 'aster-launcher-linux-x64-*.deb' \
-            -o -name 'aster-launcher-linux-x64-*.tar.gz' \
+            -o -name 'aster-launcher-linux-x64-[0-9a-f]*' \
             -o -name 'aster-launcher-macos-arm64-*.dmg' \
             -o -name 'aster-launcher-macos-x64-*.dmg' \) \
             -exec cp {} release-final/ \;
+          for file in release-final/aster-launcher-windows-x64-*.exe; do mv "$file" release-final/Aster-windows-x64.exe; done
           for file in release-final/aster-launcher-macos-arm64-*.dmg; do mv "$file" release-final/Aster-macOS-arm64.dmg; done
           for file in release-final/aster-launcher-macos-x64-*.dmg; do mv "$file" release-final/Aster-macOS-x64.dmg; done
           test "$(find release-final -maxdepth 1 -type f | wc -l)" -eq 5
-          sha256sum release-final/* > release-final/SHA256SUMS.txt
       - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}

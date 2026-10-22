@@ -50,6 +50,7 @@ if (process.platform === 'win32') {
     join(root, 'dist', `aster-launcher-windows-x64-${short}.zip`),
     join(output, `aster-launcher-windows-${process.arch}-${short}.zip`),
   );
+  await cp(binary, join(output, `aster-launcher-windows-${process.arch}-${short}.exe`));
 } else {
   const stage = join(root, '.tools', `distribution-${os}-${process.arch}-${short}`);
   await mkdir(stage, { recursive: true });
@@ -114,6 +115,7 @@ if (process.platform === 'win32') {
       join(root, 'target/release/bundle/deb', debs[0]),
       join(output, `aster-launcher-linux-${process.arch}-${short}.deb`),
     );
+    await cp(binary, join(output, `aster-launcher-linux-${process.arch}-${short}`));
   }
   for (const [source, name] of [
     ['LICENSE', 'LICENSE'],
@@ -143,19 +145,4 @@ if (process.platform === 'win32') {
     execFileSync('tar', ['-czf', archive, '-C', stage, '.'], { cwd: root, stdio: 'inherit' });
   }
 }
-const files = await readdir(output);
-const checksums = await Promise.all(
-  files
-    .filter((file) => file.includes(short))
-    .map(async (name) => ({
-      name,
-      sha256: createHash('sha256')
-        .update(await readFile(join(output, name)))
-        .digest('hex'),
-    })),
-);
-await writeFile(
-  join(output, `SHA256SUMS-${os}-${process.arch}.txt`),
-  checksums.map((file) => `${file.sha256}  ${file.name}`).join('\n') + '\n',
-);
 console.log(`Distribution ready: ${os}/${process.arch} ${revision}`);
