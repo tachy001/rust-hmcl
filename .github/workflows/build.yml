@@ -54,6 +54,20 @@ jobs:
       - name: Build Linux application
         if: runner.os == 'Linux'
         run: npm run tauri build -- --bundles deb
+      - name: Select tested executable on Linux
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p .tools/deb-native
+          dpkg-deb -x target/release/bundle/deb/*.deb .tools/deb-native
+          echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/.tools/deb-native/usr/bin/rust-hmcl-desktop" >> "$GITHUB_ENV"
+      - name: Select tested executable on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/target/release/bundle/macos/Aster Launcher.app/Contents/MacOS/rust-hmcl-desktop" >> "$GITHUB_ENV"
+      - name: Select tested executable on Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "HMCL_DESKTOP_BIN=$GITHUB_WORKSPACE/target/release/rust-hmcl-desktop.exe" >> "$GITHUB_ENV"
       - name: Verify Windows executable
         if: runner.os == 'Windows'
         run: node scripts/verify-windows-exe.mjs target/release/rust-hmcl-desktop.exe
