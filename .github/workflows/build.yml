@@ -120,10 +120,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-final
+          find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
           find release-assets -maxdepth 1 -type f \
             \( -name 'aster-launcher-windows-x64-*.exe' \
             -o -name 'aster-launcher-linux-x64-*.deb' \
-            -o -name 'aster-launcher-linux-x64-[0-9a-f]*' \
+            -o \( -name 'aster-launcher-linux-x64-[0-9a-f][0-9a-f]*' ! -name '*.deb' ! -name '*.tar.gz' \) \
             -o -name 'aster-launcher-macos-arm64-*.dmg' \
             -o -name 'aster-launcher-macos-x64-*.dmg' \) \
             -exec cp {} release-final/ \;
